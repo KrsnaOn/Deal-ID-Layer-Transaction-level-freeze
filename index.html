@@ -1,0 +1,1808 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="A payment layer that freezes only the disputed transaction instead of an innocent person's entire bank account, with timestamped spike explanations.">
+<meta name="theme-color" content="#004643" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1716" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23004643'/%3E%3Cpath d='M12 4.2l6.4 2.7v4.4c0 3.8-2.6 6.8-6.4 7.8-3.8-1-6.4-4-6.4-7.8V6.9L12 4.2z' fill='none' stroke='%23F1EDE3' stroke-width='1.4' stroke-linejoin='round'/%3E%3Cpath d='M9.1 12.1l2 2 3.9-4' fill='none' stroke='%23F1EDE3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+/* document reset — replaces the wrapper the artifact host used to provide */
+html{-webkit-text-size-adjust:100%}
+:root{color-scheme:light dark;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Deal-ID Freeze Layer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --cyprus:#004643; --cyprus-2:#0A6B66; --cyprus-3:#12847D;
+  --page:#F0EDE5; --card:#F1EDE3; --card-hi:#FAF8F2; --sunk:#E6E1D5;
+  --ink:#101F1D; --ink-2:#485A57; --ink-3:#7A8783;
+  --line:#DCD6C8;
+  --ok:#0A9086; --ok-soft:#DCEBE8; --ok-ink:#075E57;
+  --warn:#AD7119; --warn-soft:#F2E7D4; --warn-ink:#7C5011;
+  --lotus:#90323D; --lotus-soft:#F2E0E1; --lotus-ink:#6E242D;
+  --chart-1:#0A9086; --chart-2:#AD7119; --chart-3:#90323D;
+  --grid:#DFD8C9; --surface-ring:#F1EDE3;
+  --shadow-1:0 1px 2px rgba(16,31,29,.05),0 2px 8px rgba(16,31,29,.05);
+  --shadow-2:0 2px 4px rgba(16,31,29,.06),0 10px 28px rgba(16,31,29,.10);
+  --shadow-3:0 8px 20px rgba(16,31,29,.12),0 32px 64px rgba(16,31,29,.20);
+  --r-s:8px; --r-m:14px; --r-l:20px;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"Instrument Serif",Georgia,serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --cyprus:#0B2C2A; --cyprus-2:#3FA79C; --cyprus-3:#5CC2B6;
+  --page:#0E1716; --card:#17211F; --card-hi:#1E2A28; --sunk:#121B1A;
+  --ink:#EEEAE0; --ink-2:#A9B7B3; --ink-3:#7C8C88;
+  --line:#2A3735;
+  --ok:#33A294; --ok-soft:#14302C; --ok-ink:#6FD0C2;
+  --warn:#C08A12; --warn-soft:#2E2512; --warn-ink:#E0AC46;
+  --lotus:#D06B84; --lotus-soft:#331A20; --lotus-ink:#E894A6;
+  --chart-1:#33A294; --chart-2:#C08A12; --chart-3:#D06B84;
+  --grid:#283533; --surface-ring:#17211F;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4); --shadow-2:0 4px 14px rgba(0,0,0,.45);
+  --shadow-3:0 10px 40px rgba(0,0,0,.6);
+}}
+:root[data-theme="dark"]{
+  --cyprus:#0B2C2A; --cyprus-2:#3FA79C; --cyprus-3:#5CC2B6;
+  --page:#0E1716; --card:#17211F; --card-hi:#1E2A28; --sunk:#121B1A;
+  --ink:#EEEAE0; --ink-2:#A9B7B3; --ink-3:#7C8C88;
+  --line:#2A3735;
+  --ok:#33A294; --ok-soft:#14302C; --ok-ink:#6FD0C2;
+  --warn:#C08A12; --warn-soft:#2E2512; --warn-ink:#E0AC46;
+  --lotus:#D06B84; --lotus-soft:#331A20; --lotus-ink:#E894A6;
+  --chart-1:#33A294; --chart-2:#C08A12; --chart-3:#D06B84;
+  --grid:#283533; --surface-ring:#17211F;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4); --shadow-2:0 4px 14px rgba(0,0,0,.45);
+  --shadow-3:0 10px 40px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{margin:0;text-wrap:balance;font-weight:600;letter-spacing:-.015em}
+p{margin:0}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+:focus-visible{outline:2px solid var(--cyprus-3);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- shell ---------- */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;background:var(--cyprus);
+  color:#F1EDE3;box-shadow:var(--shadow-2)}
+:root[data-theme="dark"] .topbar,:root:not([data-theme="light"]) .topbar{border-bottom:1px solid var(--line)}
+.topbar-in{max-width:1140px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px;margin-right:auto;min-width:0}
+.brand-mark{width:26px;height:26px;flex:none}
+.brand-name{font-weight:600;font-size:15px;letter-spacing:-.02em;white-space:nowrap}
+.brand-sub{font-size:11px;opacity:.65;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.seg{display:flex;background:rgba(241,237,227,.12);border-radius:999px;padding:3px;gap:2px}
+.seg button{padding:6px 13px;border-radius:999px;font-size:13px;font-weight:500;color:#F1EDE3;
+  opacity:.72;white-space:nowrap;transition:background .15s,opacity .15s}
+.seg button[aria-pressed="true"]{background:#F1EDE3;color:var(--cyprus);opacity:1;font-weight:600}
+:root[data-theme="dark"] .seg button[aria-pressed="true"],
+:root:not([data-theme="light"]) .seg button[aria-pressed="true"]{background:var(--cyprus-2);color:#06201E}
+.icon-btn{width:32px;height:32px;border-radius:999px;display:grid;place-items:center;
+  background:rgba(241,237,227,.12);color:#F1EDE3;flex:none}
+.clockchip{display:flex;align-items:center;gap:6px;font-size:12px;font-family:var(--mono);
+  background:rgba(241,237,227,.12);padding:5px 10px;border-radius:999px;white-space:nowrap}
+
+.wrap{max-width:1140px;margin:0 auto;padding-inline:16px;padding-block:20px 56px}
+.view[hidden]{display:none!important}
+
+/* ---------- cards ---------- */
+.card{background:var(--card);border-radius:var(--r-m);padding:18px;box-shadow:var(--shadow-1)}
+.card.hi{background:var(--card-hi);box-shadow:var(--shadow-2)}
+.card-hd{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.card-hd h3{font-size:15px}
+.card-hd .sub{font-size:12.5px;color:var(--ink-3);margin-left:auto}
+.eyebrow{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.grid{display:grid;gap:14px}
+.g-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g-main{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}
+@media(max-width:880px){.g-main,.g-3,.g-2{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;
+  border-radius:var(--r-s);font-size:14px;font-weight:600;transition:transform .12s,box-shadow .12s,background .12s}
+.btn:active{transform:translateY(1px)}
+.btn-pri{background:var(--cyprus);color:#F1EDE3;box-shadow:var(--shadow-1)}
+.btn-pri:hover{background:var(--cyprus-2)}
+:root[data-theme="dark"] .btn-pri,:root:not([data-theme="light"]) .btn-pri{background:var(--cyprus-2);color:#06201E}
+.btn-ghost{background:var(--sunk);color:var(--ink)}
+.btn-ghost:hover{background:var(--line)}
+.btn-danger{background:var(--lotus);color:#F7ECEC}
+:root[data-theme="dark"] .btn-danger,:root:not([data-theme="light"]) .btn-danger{color:#1A0B0E}
+.btn-ok{background:var(--ok);color:#F1F8F6}
+:root[data-theme="dark"] .btn-ok,:root:not([data-theme="light"]) .btn-ok{color:#06201E}
+.btn-sm{padding:7px 12px;font-size:13px}
+.btn[disabled]{opacity:.42;cursor:not-allowed}
+.btn-link{color:var(--cyprus-2);font-weight:600;font-size:13px;text-decoration:underline;
+  text-underline-offset:2px;padding:2px}
+:root[data-theme="dark"] .btn-link,:root:not([data-theme="light"]) .btn-link{color:var(--cyprus-3)}
+
+/* ---------- form ---------- */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:13px}
+.field label{font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.field input,.field select,.field textarea{background:var(--card-hi);border:1px solid var(--line);
+  border-radius:var(--r-s);padding:10px 12px;font:inherit;color:var(--ink);width:100%}
+.field textarea{resize:vertical;min-height:78px;line-height:1.5}
+.field input:focus,.field select,.field textarea:focus{outline:none}
+.field input[disabled]{opacity:.55;cursor:not-allowed}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--cyprus-3);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--cyprus-3) 18%,transparent)}
+.hint{font-size:11.5px;color:var(--ink-3)}
+
+/* ---------- pills / status ---------- */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+  font-size:11.5px;font-weight:600;white-space:nowrap}
+.pill svg{width:12px;height:12px;flex:none}
+.p-ok{background:var(--ok-soft);color:var(--ok-ink)}
+.p-warn{background:var(--warn-soft);color:var(--warn-ink)}
+.p-danger{background:var(--lotus-soft);color:var(--lotus-ink)}
+.p-neutral{background:var(--sunk);color:var(--ink-2)}
+.p-cyprus{background:color-mix(in srgb,var(--cyprus) 12%,transparent);color:var(--cyprus)}
+:root[data-theme="dark"] .p-cyprus,:root:not([data-theme="light"]) .p-cyprus{color:var(--cyprus-3)}
+
+/* ---------- balance ---------- */
+.bal-head{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.bal-total{font-size:13px;color:var(--ink-3)}
+.bal-amount{font-family:var(--mono);font-size:34px;font-weight:600;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;line-height:1.1}
+.bal-bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--sunk);
+  margin:16px 0 12px;gap:2px}
+.bal-bar span{display:block;transition:width .5s cubic-bezier(.22,1,.36,1)}
+.bal-bar .seg-ok{background:var(--ok)}
+.bal-bar .seg-hold{background:var(--lotus);
+  background-image:repeating-linear-gradient(135deg,transparent 0 4px,rgba(255,255,255,.28) 4px 8px)}
+.bal-split{display:flex;gap:10px;flex-wrap:wrap}
+.bal-item{flex:1 1 150px;background:var(--card-hi);border-radius:var(--r-s);padding:11px 13px;
+  box-shadow:var(--shadow-1)}
+.bal-item.is-hold{background:var(--lotus-soft)}
+.bal-item .k{font-size:11.5px;color:var(--ink-2);display:flex;align-items:center;gap:5px;font-weight:600}
+.bal-item.is-hold .k{color:var(--lotus-ink)}
+.bal-item .v{font-family:var(--mono);font-size:20px;font-weight:600;margin-top:3px;font-variant-numeric:tabular-nums}
+.bal-item.is-hold .v{color:var(--lotus)}
+.bal-item .n{font-size:11px;color:var(--ink-3);margin-top:2px}
+
+/* ---------- deal rows ---------- */
+.rows{display:flex;flex-direction:column;gap:9px}
+.row{background:var(--card-hi);border-radius:var(--r-s);padding:12px 14px;box-shadow:var(--shadow-1);
+  display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.row.is-frozen{background:var(--lotus-soft);box-shadow:inset 3px 0 0 var(--lotus),var(--shadow-1)}
+.row.is-hold{box-shadow:inset 3px 0 0 var(--warn),var(--shadow-1)}
+.row-main{flex:1 1 200px;min-width:0}
+.row-title{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.row-meta{font-size:12px;color:var(--ink-3);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row-amt{font-family:var(--mono);font-weight:600;font-size:16px;text-align:right;font-variant-numeric:tabular-nums}
+.row-actions{display:flex;gap:7px;flex-wrap:wrap;width:100%}
+.dealid{font-family:var(--mono);font-size:11.5px;background:var(--sunk);padding:2px 7px;
+  border-radius:5px;letter-spacing:-.01em;white-space:nowrap}
+.hashline{font-family:var(--mono);font-size:11px;color:var(--ink-3);word-break:break-all;line-height:1.6}
+
+/* ---------- empty ---------- */
+.empty{padding:26px 16px;text-align:center;color:var(--ink-3);font-size:13.5px;
+  background:var(--card-hi);border-radius:var(--r-s);box-shadow:var(--shadow-1)}
+
+/* ---------- chart ---------- */
+.chartwrap{position:relative;width:100%;overflow-x:auto}
+.chartwrap svg{display:block;width:100%;min-width:430px;height:auto}
+.chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--ink-2)}
+.chart-legend i{width:11px;height:11px;border-radius:3px;display:inline-block;vertical-align:-1px;margin-right:6px}
+.bar{cursor:pointer;transition:opacity .15s}
+.bar:hover{opacity:.78}
+.tip{position:absolute;pointer-events:none;background:var(--cyprus);color:#F1EDE3;padding:8px 11px;
+  border-radius:var(--r-s);font-size:12px;box-shadow:var(--shadow-3);z-index:12;max-width:230px;
+  transform:translate(-50%,-112%);opacity:0;transition:opacity .12s}
+:root[data-theme="dark"] .tip,:root:not([data-theme="light"]) .tip{background:var(--card-hi);
+  color:var(--ink);border:1px solid var(--line)}
+.tip.on{opacity:1}
+.tip b{font-family:var(--mono);display:block;font-size:14px;margin-top:2px}
+
+/* ---------- timeline ---------- */
+.tl{list-style:none;margin:0;padding:0;position:relative}
+.tl li{position:relative;padding:0 0 16px 26px}
+.tl li:last-child{padding-bottom:0}
+.tl li::before{content:"";position:absolute;left:4px;top:5px;width:9px;height:9px;border-radius:50%;
+  background:var(--cyprus-2);box-shadow:0 0 0 3px var(--card)}
+.tl li::after{content:"";position:absolute;left:8px;top:16px;bottom:0;width:1px;background:var(--line)}
+.tl li:last-child::after{display:none}
+.tl li.bad::before{background:var(--lotus)}
+.tl li.warn::before{background:var(--warn)}
+.tl li.good::before{background:var(--ok)}
+.tl .t-lab{font-size:13.5px;font-weight:600}
+.tl .t-time{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:1px}
+.tl .t-det{font-size:12.5px;color:var(--ink-2);margin-top:2px}
+
+/* ---------- modal ---------- */
+.scrim{position:fixed;inset:0;background:rgba(9,20,19,.55);backdrop-filter:blur(3px);z-index:60;
+  display:grid;place-items:center;padding:16px;overflow-y:auto}
+.modal{background:var(--card-hi);border-radius:var(--r-l);box-shadow:var(--shadow-3);
+  width:min(560px,100%);max-height:90vh;overflow-y:auto;padding:22px}
+.modal.wide{width:min(720px,100%)}
+.modal-hd{display:flex;align-items:flex-start;gap:12px;margin-bottom:6px}
+.modal-hd h3{font-size:18px;letter-spacing:-.02em}
+.modal-x{margin-left:auto;width:30px;height:30px;border-radius:50%;background:var(--sunk);
+  display:grid;place-items:center;flex:none;font-size:17px;line-height:1;color:var(--ink-2)}
+.modal-lead{color:var(--ink-2);font-size:13.5px;margin:6px 0 16px}
+.modal-ft{display:flex;gap:9px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+.alertmark{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none}
+.am-warn{background:var(--warn-soft);color:var(--warn)}
+.am-danger{background:var(--lotus-soft);color:var(--lotus)}
+.am-ok{background:var(--ok-soft);color:var(--ok)}
+
+/* ---------- spike explanation ---------- */
+.spike-card{background:var(--card-hi);border-radius:var(--r-m);padding:15px;box-shadow:var(--shadow-1)}
+.spike-card + .spike-card{margin-top:10px}
+.spike-quote{font-size:14px;line-height:1.55;margin:9px 0 8px;white-space:pre-wrap}
+.editline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-3);
+  font-family:var(--mono);padding-top:8px;border-top:1px dashed var(--line);margin-top:10px}
+.editline .pencil{width:11px;height:11px}
+.ver{background:var(--card);border-radius:var(--r-s);padding:12px 13px;box-shadow:var(--shadow-1)}
+.ver + .ver{margin-top:9px}
+.ver.current{box-shadow:inset 3px 0 0 var(--ok),var(--shadow-1)}
+.ver.after-complaint{box-shadow:inset 3px 0 0 var(--lotus),var(--shadow-1)}
+.ver-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.ver-n{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink-2)}
+.ver-body{font-size:13px;line-height:1.5;white-space:pre-wrap}
+.ver-times{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:7px;
+  display:flex;gap:10px;flex-wrap:wrap}
+.diffdel{background:var(--lotus-soft);color:var(--lotus-ink);text-decoration:line-through;
+  text-decoration-thickness:1px;padding:0 2px;border-radius:3px}
+.diffadd{background:var(--ok-soft);color:var(--ok-ink);padding:0 2px;border-radius:3px}
+
+/* ---------- comparison ---------- */
+.cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media(max-width:700px){.cmp{grid-template-columns:minmax(0,1fr)}}
+.cmp-side{border-radius:var(--r-m);padding:16px;box-shadow:var(--shadow-1)}
+.cmp-old{background:var(--lotus-soft)}
+.cmp-new{background:var(--ok-soft)}
+.cmp-h{font-size:12.5px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;gap:7px}
+.cmp-old .cmp-h{color:var(--lotus-ink)}
+.cmp-new .cmp-h{color:var(--ok-ink)}
+.cmp-stack{display:flex;height:150px;flex-direction:column-reverse;border-radius:var(--r-s);
+  overflow:hidden;margin:13px 0;gap:2px;background:var(--card-hi)}
+.cmp-stack span{display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;
+  font-family:var(--mono);transition:height .6s cubic-bezier(.22,1,.36,1);overflow:hidden}
+.st-frozen{background:var(--lotus);color:#F7ECEC;
+  background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(255,255,255,.22) 5px 10px)}
+.st-free{background:var(--ok);color:#F1F8F6}
+:root[data-theme="dark"] .st-frozen,:root:not([data-theme="light"]) .st-frozen{color:#1A0B0E}
+:root[data-theme="dark"] .st-free,:root:not([data-theme="light"]) .st-free{color:#06201E}
+.cmp-fact{font-size:12.5px;line-height:1.5;display:flex;gap:7px;margin-top:7px}
+.cmp-fact svg{width:13px;height:13px;flex:none;margin-top:3px}
+.cmp-old .cmp-fact{color:var(--lotus-ink)}
+.cmp-new .cmp-fact{color:var(--ok-ink)}
+
+/* ---------- SLA ---------- */
+.sla{display:flex;align-items:center;gap:13px;background:var(--card-hi);border-radius:var(--r-m);
+  padding:13px 15px;box-shadow:var(--shadow-1);flex-wrap:wrap}
+.sla-clock{font-family:var(--mono);font-size:25px;font-weight:600;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;line-height:1}
+.sla.urgent .sla-clock{color:var(--lotus)}
+.sla-track{flex:1 1 130px;height:7px;border-radius:999px;background:var(--sunk);overflow:hidden;min-width:100px}
+.sla-track i{display:block;height:100%;background:var(--ok);transition:width 1s linear}
+.sla.urgent .sla-track i{background:var(--lotus)}
+
+/* ---------- misc ---------- */
+.note{background:var(--sunk);border-radius:var(--r-s);padding:11px 13px;font-size:12.5px;
+  color:var(--ink-2);line-height:1.55;display:flex;gap:9px}
+.note svg{width:14px;height:14px;flex:none;margin-top:3px;color:var(--ink-3)}
+.kv{display:grid;grid-template-columns:minmax(120px,auto) minmax(0,1fr);gap:7px 14px;font-size:13px}
+.kv dt{color:var(--ink-3);font-size:12px}
+.kv dd{margin:0;font-family:var(--mono);font-size:12.5px;word-break:break-word}
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.flow-node{background:var(--card-hi);border-radius:var(--r-s);padding:8px 11px;box-shadow:var(--shadow-1);
+  text-align:center;flex:1 1 92px;min-width:92px}
+.flow-node.bad{background:var(--lotus-soft);color:var(--lotus-ink)}
+.flow-node.good{background:var(--ok-soft);color:var(--ok-ink)}
+.flow-node b{display:block;font-size:12.5px}
+.flow-node span{font-size:10.5px;opacity:.8}
+.flow-arrow{color:var(--ink-3);flex:none;font-family:var(--mono);font-size:15px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  transition:bottom .2s}
+body.touring .toast{bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+.toast{position:fixed;left:50%;transform:translateX(-50%);
+  background:var(--cyprus);color:#F1EDE3;padding:11px 17px;border-radius:999px;box-shadow:var(--shadow-3);
+  font-size:13.5px;font-weight:500;z-index:80;max-width:calc(100% - 32px);text-align:center}
+:root[data-theme="dark"] .toast,:root:not([data-theme="light"]) .toast{background:var(--cyprus-2);color:#06201E}
+.tour{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:70;
+  max-width:1108px;margin:0 auto;background:var(--cyprus);color:#F1EDE3;border-radius:var(--r-m);
+  padding:14px 16px;box-shadow:var(--shadow-3);display:flex;align-items:center;gap:13px;flex-wrap:wrap}
+:root[data-theme="dark"] .tour,:root:not([data-theme="light"]) .tour{background:var(--card-hi);
+  color:var(--ink);border:1px solid var(--cyprus-2)}
+.tour-step{font-family:var(--mono);font-size:11px;opacity:.7;letter-spacing:.06em}
+.tour-txt{flex:1 1 240px;font-size:13.5px;line-height:1.45}
+.tour .btn-ghost{background:rgba(241,237,227,.16);color:inherit}
+.gc{background:var(--sunk);border-radius:var(--r-m);padding:16px;margin-top:22px}
+.gc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:12px;margin-top:11px}
+.gc-item{font-size:12.5px;line-height:1.5}
+.gc-item b{display:block;font-size:12px;color:var(--cyprus);margin-bottom:2px}
+:root[data-theme="dark"] .gc-item b,:root:not([data-theme="light"]) .gc-item b{color:var(--cyprus-3)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* ---------- auth tabs ---------- */
+.tabs{display:flex;gap:3px;background:var(--sunk);padding:3px;border-radius:999px;margin-bottom:18px}
+.tabs button{flex:1;padding:9px 12px;border-radius:999px;font-size:13.5px;font-weight:600;
+  color:var(--ink-2);transition:background .15s,color .15s}
+.tabs button[aria-selected="true"]{background:var(--card-hi);color:var(--ink);box-shadow:var(--shadow-1)}
+.quickrow{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:15px}
+.quickchip{display:flex;align-items:center;gap:7px;padding:7px 11px;border-radius:999px;
+  background:var(--card);box-shadow:var(--shadow-1);font-size:12px;font-weight:600;color:var(--ink-2)}
+.quickchip:hover{box-shadow:inset 0 0 0 1.5px var(--cyprus-2),var(--shadow-1);color:var(--ink)}
+.quickchip span{width:20px;height:20px;border-radius:50%;background:var(--cyprus);color:#F1EDE3;
+  display:grid;place-items:center;font-size:9px;font-weight:700}
+:root[data-theme="dark"] .quickchip span,:root:not([data-theme="light"]) .quickchip span{
+  background:var(--cyprus-2);color:#06201E}
+.roleopts{display:flex;flex-direction:column;gap:8px}
+.roleopt{display:flex;align-items:flex-start;gap:11px;padding:11px 13px;border-radius:var(--r-s);
+  background:var(--card);box-shadow:var(--shadow-1);text-align:left;width:100%}
+.roleopt[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--cyprus-2),var(--shadow-1);background:var(--card-hi)}
+.roleopt-dot{width:17px;height:17px;border-radius:50%;flex:none;margin-top:2px;
+  box-shadow:inset 0 0 0 2px var(--line)}
+.roleopt[aria-pressed="true"] .roleopt-dot{box-shadow:inset 0 0 0 5px var(--cyprus-2)}
+.roleopt b{display:block;font-size:13.5px}
+.roleopt i{display:block;font-style:normal;font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.45}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:62px!important}
+.pw-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11.5px;
+  font-weight:600;color:var(--cyprus-2);padding:5px 7px;border-radius:6px}
+:root[data-theme="dark"] .pw-toggle,:root:not([data-theme="light"]) .pw-toggle{color:var(--cyprus-3)}
+.login-ok{background:var(--ok-soft);color:var(--ok-ink);border-radius:var(--r-s);
+  padding:9px 12px;font-size:12.5px;display:flex;gap:8px;margin-bottom:12px}
+.login-ok svg{width:14px;height:14px;flex:none;margin-top:2px}
+.switcher{text-align:center;font-size:12.5px;color:var(--ink-3);margin-top:14px}
+
+/* ---------- access denied ---------- */
+.denied{max-width:560px;margin:34px auto;background:var(--card-hi);border-radius:var(--r-l);
+  padding:30px;box-shadow:var(--shadow-2);text-align:center}
+.denied .alertmark{margin:0 auto 15px;width:52px;height:52px;border-radius:15px}
+.denied .alertmark svg{width:26px;height:26px}
+.denied h2{font-size:20px;letter-spacing:-.02em}
+.denied p{font-size:13.5px;color:var(--ink-2);margin:10px auto 0;max-width:42ch;line-height:1.55}
+
+/* ---------- workspace access card ---------- */
+.seccard{background:var(--card);border-radius:var(--r-m);padding:16px;margin-top:14px;box-shadow:var(--shadow-1)}
+.seclog{list-style:none;margin:11px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.seclog li{display:flex;gap:9px;align-items:flex-start;font-size:12px;color:var(--ink-2);
+  font-family:var(--mono);background:var(--card-hi);border-radius:6px;padding:7px 10px}
+.seclog li b{font-weight:600;flex:none}
+.seclog li.bad{color:var(--lotus-ink);background:var(--lotus-soft)}
+.seclog li.good{color:var(--ok-ink);background:var(--ok-soft)}
+
+/* ---------- sign-in ---------- */
+.login-wrap{min-height:62vh;display:grid;place-items:center;padding-block:14px}
+.login-card{background:var(--card-hi);border-radius:var(--r-l);box-shadow:var(--shadow-2);
+  padding:26px;width:min(520px,100%)}
+.login-card h2{font-size:21px;letter-spacing:-.025em}
+.login-lead{font-size:13.5px;color:var(--ink-2);margin:6px 0 18px;line-height:1.5}
+.accts{display:flex;flex-direction:column;gap:9px;margin-bottom:17px}
+.acct{display:flex;align-items:center;gap:12px;text-align:left;width:100%;padding:12px 13px;
+  border-radius:var(--r-s);background:var(--card);box-shadow:var(--shadow-1);transition:box-shadow .15s}
+.acct:hover{box-shadow:inset 0 0 0 1.5px var(--line),var(--shadow-1)}
+.acct[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--cyprus-2),var(--shadow-1);background:var(--card-hi)}
+.acct-av{width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;
+  background:var(--cyprus);color:#F1EDE3;font-weight:600;font-size:13.5px;letter-spacing:.02em}
+:root[data-theme="dark"] .acct-av,:root:not([data-theme="light"]) .acct-av{background:var(--cyprus-2);color:#06201E}
+.acct-b{min-width:0;flex:1;display:block}
+.acct-role{display:block;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600;line-height:1.35}
+.acct-name{display:block;font-size:14px;font-weight:600;margin-top:1px;line-height:1.3}
+.acct-sub{display:block;font-size:11.5px;color:var(--ink-3);font-family:var(--mono);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+.acct-tick{width:17px;height:17px;flex:none;color:var(--cyprus-2);opacity:0}
+.acct[aria-pressed="true"] .acct-tick{opacity:1}
+.login-err{background:var(--lotus-soft);color:var(--lotus-ink);border-radius:var(--r-s);
+  padding:9px 12px;font-size:12.5px;display:flex;gap:8px;margin-bottom:12px}
+.login-err svg{width:14px;height:14px;flex:none;margin-top:2px}
+.login-ft{display:flex;gap:9px;flex-wrap:wrap;margin-top:4px}
+.login-ft .btn{flex:1 1 auto}
+.demo-line{margin-top:18px;padding-top:15px;border-top:1px dashed var(--line);
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.demo-line span{font-size:12.5px;color:var(--ink-3);flex:1 1 160px}
+
+/* ---------- signed-in identity ---------- */
+.topright{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.idchip{display:flex;align-items:center;gap:8px;background:rgba(241,237,227,.12);
+  padding:5px 11px 5px 6px;border-radius:999px;max-width:100%}
+.idchip-av{width:24px;height:24px;border-radius:50%;background:#F1EDE3;color:var(--cyprus);
+  display:grid;place-items:center;font-size:10.5px;font-weight:700;flex:none}
+:root[data-theme="dark"] .idchip-av,:root:not([data-theme="light"]) .idchip-av{background:var(--cyprus-2);color:#06201E}
+.idchip b{font-size:12.5px;font-weight:600;display:block;line-height:1.25;white-space:nowrap}
+.idchip i{font-size:10.5px;opacity:.7;font-style:normal;display:block;line-height:1.25;white-space:nowrap}
+.tb-btn{padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;
+  background:rgba(241,237,227,.12);color:#F1EDE3;white-space:nowrap}
+.tb-btn:hover{background:rgba(241,237,227,.22)}
+@media(max-width:620px){.idchip i{display:none}}
+
+</style>
+</head>
+<body>
+
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="21" height="21" rx="6.5" fill="#F1EDE3" opacity=".14"/>
+        <path d="M12 3.6l7 3.1v5c0 4.3-2.9 7.6-7 8.7-4.1-1.1-7-4.4-7-8.7v-5l7-3.1z" stroke="#F1EDE3" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M8.7 12.1l2.2 2.2 4.4-4.5" stroke="#F1EDE3" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div style="min-width:0">
+        <div class="brand-name">Deal-ID Layer</div>
+        <div class="brand-sub">Transaction-level freeze</div>
+      </div>
+    </div>
+    <div class="topright" id="topRight"></div>
+    <button class="icon-btn" id="themeBtn" aria-label="Switch colour theme">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="view" id="view-login"></section>
+  <section class="view" id="view-payer"></section>
+  <section class="view" id="view-payee"></section>
+  <section class="view" id="view-reviewer"></section>
+
+</main>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<div id="tourRoot"></div>
+
+<script>
+/* ============================================================
+   Deal-ID Layer — transaction-level freeze prototype
+   All state lives in memory; a reload restores the demo state.
+   ============================================================ */
+
+/* ---------- clock (simulated, IST) ---------- */
+const BASE = new Date('2026-09-21T15:17:00Z').getTime();  // 21 Sep 2026, 8:47 PM IST
+const BOOT = Date.now();
+let skew = 0;
+const now = () => new Date(BASE + (Date.now() - BOOT) + skew);
+const IST = 'Asia/Kolkata';
+const fmtDT = d => new Intl.DateTimeFormat('en-IN',{day:'2-digit',month:'short',year:'numeric',
+  hour:'numeric',minute:'2-digit',hour12:true,timeZone:IST}).format(d).replace(/ /g,' ');
+const fmtT  = d => new Intl.DateTimeFormat('en-IN',{hour:'numeric',minute:'2-digit',second:'2-digit',
+  hour12:true,timeZone:IST}).format(d).replace(/ /g,' ');
+const fmtD  = d => new Intl.DateTimeFormat('en-IN',{day:'2-digit',month:'short',timeZone:IST}).format(d);
+const dayKey = d => new Intl.DateTimeFormat('en-CA',{timeZone:IST}).format(d);
+const money = n => '₹' + new Intl.NumberFormat('en-IN',{maximumFractionDigits:0}).format(Math.round(n));
+const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function ago(from,to){
+  const m = Math.max(0,Math.round((to-from)/60000));
+  if(m<60) return m+' min';
+  const h = Math.round(m/60); if(h<48) return h+' hr';
+  return Math.round(h/24)+' days';
+}
+
+/* ---------- icons ---------- */
+const I = {
+  lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 118 0v3"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12.5l4.5 4.5L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>',
+  alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3.5l9.5 16.5h-19L12 3.5z" stroke-linejoin="round"/><path d="M12 10v4M12 17.2v.1" stroke-linecap="round"/></svg>',
+  info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.1" stroke-linecap="round"/></svg>',
+  pencil:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 00-3-3l-10 10L4 20z" stroke-linejoin="round"/></svg>',
+  spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 17l5-6 4 3.5L21 6" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 11V6h-5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3l7.5 3.2v5c0 4.5-3 8-7.5 9.3C7.5 19.2 4.5 15.7 4.5 11.2v-5L12 3z" stroke-linejoin="round"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>'
+};
+
+/* ---------- accounts ---------- */
+const AC = {
+  payer:{name:'Arjun Mehta', vpa:'arjun.mehta@okaxis', kyc:'KYC-AM-4471', balance:486000,
+         device:'d9f1:a4e0 · 49.36.181.22', age:'4 yr 2 mo', frozen:false},
+  payee:{name:'Priya Nair', biz:'Nairaa Design Studio', vpa:'nairaa@okhdfc', kyc:'KYC-PN-9082',
+         balance:214500, device:'7c2b:11de · 106.51.74.9', age:'6 yr 1 mo', frozen:false},
+  mule:{name:'Rohit Shinde', biz:'QuickCash Traders', vpa:'quickcash.rs@oksbi', kyc:'KYC-RS-2210',
+        balance:92000, device:'ff03:9b7c · 103.86.12.240', age:'19 days', frozen:false},
+  victim:{name:'Sunita Rao', vpa:'sunita.rao@okicici', kyc:'KYC-SR-6613', balance:0, frozen:false},
+  reviewer:{name:'Insp. K. Verma', biz:'District Cyber Crime Cell \u00B7 Unit 4',
+            vpa:'kverma@cybercell.gov.in', kyc:'BADGE-CC-4412', frozen:false}
+};
+
+/* the opening state of every account, so the demo can be put back */
+const AC0 = JSON.parse(JSON.stringify(AC));
+
+/* ---------- user registry: credentials, roles and password hashing ---------- */
+const USERS = [];                       // {uid,name,org,role,acKey,salt,hash,createdAt}
+const ROLE_LABEL = {payer:'Payer', payee:'Payee', reviewer:'Reviewer'};
+const ROLE_WORKSPACE = {payer:'Payer workspace', payee:'Payee workspace', reviewer:'Reviewer workspace'};
+const ROLE_DESC = {
+  payer:'Send money. Propose payments that the receiver has to accept before anything moves.',
+  payee:'Receive money. Accept or bounce incoming payments and explain unusual inflow.',
+  reviewer:'Bank or cyber cell. File complaints against a Deal ID and rule on proof packs.'
+};
+const OFFICER_CODE = 'CYBER-2026';      // required to register a reviewer
+const DEMO_CREDS = [
+  {role:'payer',    uid:'rohit@quickcash.in',      pw:'Quick@4417'},
+  {role:'payee',    uid:'priya@nairaa.studio',     pw:'Nairaa@9082'},
+  {role:'reviewer', uid:'kverma@cybercell.gov.in', pw:'Cyber@1021'}
+];
+const initials = n => n.replace(/[^A-Za-z ]/g,'').trim().split(/\s+/).slice(-2)
+  .map(w=>w[0]).join('').toUpperCase();
+
+/* Passwords are never stored. Each account keeps a random salt and the SHA-256 of
+   salt + password; sign-in re-derives the digest and compares. A real deployment
+   would use a slow KDF such as bcrypt or Argon2 — SHA-256 is used here because it
+   is what the browser exposes natively and keeps the prototype dependency-free. */
+async function makeUser({name, org, role, uid, pw, acKey}){
+  const salt = [...crypto.getRandomValues(new Uint8Array(8))]
+    .map(b=>b.toString(16).padStart(2,'0')).join('');
+  const hash = await sha256(salt + ':' + pw);
+  const u = {uid:uid.toLowerCase().trim(), name, org, role, acKey, salt, hash, createdAt:now()};
+  USERS.push(u);
+  return u;
+}
+const findUser = uid => USERS.find(u=>u.uid===String(uid||'').toLowerCase().trim());
+async function verifyPassword(u, pw){ return u && (await sha256(u.salt + ':' + pw)) === u.hash; }
+
+async function seedUsers(){
+  if(USERS.length) return;
+  await makeUser({name:'Rohit Shinde', org:'QuickCash Traders', role:'payer',
+                  uid:DEMO_CREDS[0].uid, pw:DEMO_CREDS[0].pw, acKey:'mule'});
+  await makeUser({name:'Priya Nair', org:'Nairaa Design Studio', role:'payee',
+                  uid:DEMO_CREDS[1].uid, pw:DEMO_CREDS[1].pw, acKey:'payee'});
+  await makeUser({name:'Insp. K. Verma', org:'District Cyber Crime Cell · Unit 4', role:'reviewer',
+                  uid:DEMO_CREDS[2].uid, pw:DEMO_CREDS[2].pw, acKey:'reviewer'});
+}
+
+/* a freshly registered user gets their own empty account — never a share of anyone else's */
+let acSeq = 0;
+function newAccountFor(role, name, org, uid){
+  const key = 'u' + (++acSeq);
+  AC[key] = {name, biz:org||'', vpa: uid.split('@')[0].replace(/[^a-z0-9.]/gi,'') + '@newbank',
+    kyc:'KYC-NEW-' + (4000+acSeq), balance: role==='payer' ? 50000 : 0,
+    device:'this device · unrecorded', age:'today', frozen:false};
+  return key;
+}
+
+/* ---------- security log ---------- */
+function logSec(kind, text){
+  S.seclog.unshift({at:now(), kind, text});
+  if(S.seclog.length>6) S.seclog.length=6;
+}
+
+/* ---------- state ---------- */
+const S = {
+  role:'payee',
+  deals:[],
+  inflowByVpa:{},  // vpa -> 14 rows of daily inflow
+  spikes:[],
+  tourStep:-1,
+  auth:null,      // {uid, role, name, org, acKey, at} once signed in
+  denied:null,    // a workspace the signed-in user tried and was refused
+  seclog:[],      // recent authentication and access events
+  ui:{tab:'signin', err:'', ok:'', fails:0, lockUntil:0, showPw:false, signupRole:'payee',
+      form:{liUid:'', liPw:'', name:'', org:'', uid:'', code:'', pw:'', pw2:''}}
+};
+
+/* ---------- crypto: real SHA-256 ---------- */
+async function sha256(obj){
+  const text = typeof obj === 'string' ? obj : JSON.stringify(obj);
+  if(!(window.crypto && window.crypto.subtle)){           // file:// fallback only
+    let h1=0x811c9dc5,h2=0x01000193;
+    for(let i=0;i<text.length;i++){h1=(h1^text.charCodeAt(i))>>>0;h1=Math.imul(h1,h2)>>>0;}
+    return ('fallback'+h1.toString(16)).padEnd(64,'0').slice(0,64);
+  }
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// the exact bytes that get hashed — shown to the user so the hash is checkable
+const dealPayload = d => JSON.stringify({
+  deal_id:d.id, from:d.fromVpa, to:d.toVpa, amount_paise:Math.round(d.amount*100),
+  purpose:d.purpose, proposed_at:d.proposedAt.toISOString(),
+  accepted_at:d.acceptedAt ? d.acceptedAt.toISOString() : null,
+  sender_kyc:(AC[d.fromKey]||AC.payer).kyc, receiver_kyc:AC.payee.kyc
+});
+
+/* ---------- deal ids ---------- */
+const B32='0123456789ABCDEF';
+let dealSeq = 0;
+function makeDealId(d){
+  dealSeq++;
+  const stamp = dayKey(d).replace(/-/g,'');
+  let tail=''; let v = (d.getTime()>>>0) ^ (dealSeq*2654435761);
+  for(let i=0;i<6;i++){ tail += B32[(v>>>(i*4)) & 15]; }
+  return 'DL-'+stamp+'-'+tail;
+}
+
+/* ---------- risk engine ---------- */
+function scoreRisk(amount, fromKey){
+  const flags=[]; let score=0;
+  const past = S.deals.filter(d=>d.fromKey===fromKey && ['paid','released','closed'].includes(d.status));
+  if(past.length===0){ score+=35; flags.push('First-ever transfer from this sender'); }
+  const amts = S.deals.filter(d=>d.status!=='declined').map(d=>d.amount).sort((a,b)=>a-b);
+  const med = amts.length ? amts[Math.floor(amts.length/2)] : 12000;
+  if(amount > med*3){ score+=25; flags.push('Amount is '+(amount/med).toFixed(1)+'× this account’s median deal'); }
+  const t = now().getTime();
+  const burst = S.deals.filter(d=>d.fromKey===fromKey && (t-d.proposedAt.getTime())<864e5).length;
+  if(burst>=3){ score+=20; flags.push(burst+' transfers from this sender in 24 hours'); }
+  if(amount>=50000 && amount%10000===0){ score+=15; flags.push('Round-figure transfer at or above ₹50,000'); }
+  if(fromKey==='mule'){ score+=20; flags.push('Sender account opened 19 days ago'); }
+  return {score:Math.min(score,100), flags};
+}
+
+/* ---------- robust spike statistics (median + MAD) ---------- */
+function rowsFor(vpa){ return S.inflowByVpa[vpa] || []; }
+function inflowStats(vpa){
+  const hist = rowsFor(vpa).slice(0,-1).map(r=>r.amount);   // exclude today
+  const med = median(hist);
+  const mad = median(hist.map(v=>Math.abs(v-med)));
+  return {median:med, mad, upper: med + 3*1.4826*mad};
+}
+function median(a){
+  if(!a.length) return 0;
+  const s=[...a].sort((x,y)=>x-y), m=s.length>>1;
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+}
+const todayRow = vpa => { const r=rowsFor(vpa); return r[r.length-1]; };
+function ensureInflow(vpa, seedArr){
+  if(S.inflowByVpa[vpa]) return;
+  const t0=now(), n=14, rows=[];
+  for(let i=0;i<n;i++){
+    const d=new Date(t0.getTime()-(n-1-i)*864e5);
+    rows.push({key:dayKey(d), date:d, amount:seedArr?seedArr[i]:0, dealIds:[]});
+  }
+  S.inflowByVpa[vpa]=rows;
+}
+function addInflow(vpa, amount, dealId){
+  ensureInflow(vpa);
+  const r = todayRow(vpa);
+  r.amount += amount;
+  (r.dealIds ||= []).push(dealId);
+}
+
+/* ---------- seed: 14 days of studio inflow ---------- */
+const SEED_INFLOW = [16200,21400,14800,19600,23100,12700,17900,26300,15400,20800,18200,24600,13900,9500];
+function seed(){
+  const t0 = now();
+  ensureInflow(AC.payee.vpa, SEED_INFLOW);
+  // closed deals already on the ledger — these make Arjun a "known" sender
+  [['Brand identity — phase 1',24000,11],['Packaging design retainer',18500,7],
+   ['Website UI — milestone 2',31000,4]].forEach(([purpose,amount,back])=>{
+    const p = new Date(t0.getTime()-back*864e5);
+    const a = new Date(p.getTime()+38*6e4);
+    S.deals.push({id:makeDealId(p), fromKey:'payer', fromName:AC.payer.name, fromVpa:AC.payer.vpa,
+      toVpa:AC.payee.vpa, amount, purpose, proposedAt:p, acceptedAt:a, paidAt:a,
+      status:'closed', seeded:true, risk:{score:10,flags:[]}, hash:'',
+      timeline:[{at:p,lab:'Proposed',det:purpose},{at:a,lab:'Accepted by receiver'},
+                {at:a,lab:'Paid — Deal closed',kind:'good'}]});
+  });
+  Promise.all(S.deals.map(async d=>{ d.hash = await sha256(dealPayload(d)); }));
+}
+
+/* ---------- money ---------- */
+function payeeFunds(vpa){
+  vpa = vpa || AC.payee.vpa;
+  const acct = Object.values(AC).find(a=>a.vpa===vpa) || AC.payee;
+  const mine = S.deals.filter(d=>d.toVpa===vpa);
+  let landed = acct.balance;
+  mine.forEach(d=>{ if(!d.seeded && ['paid','disputed','released'].includes(d.status)) landed += d.amount; });
+  const hold = mine.filter(d=>d.status==='disputed').reduce((s,d)=>s+d.amount,0);
+  return {total:landed, hold, available:landed-hold};
+}
+
+/* ---------- deal lifecycle ---------- */
+const RISK_HOLD_MS = 90000;           // stands in for a 4-hour hold
+function proposeDeal(fromKey, amount, purpose){
+  const t = now(), from = AC[fromKey];
+  const risk = scoreRisk(amount, fromKey);
+  const d = {id:makeDealId(t), fromKey, fromName:from.biz||from.name, fromVpa:from.vpa,
+    toVpa:AC.payee.vpa, amount, purpose, proposedAt:t, acceptedAt:null, paidAt:null,
+    status:'proposed', risk, hash:'', seeded:false,
+    timeline:[{at:t,lab:'Proposed',det:purpose+' · '+money(amount)}]};
+  if(risk.score>=50) d.timeline.push({at:t,lab:'Flagged for risk hold',kind:'warn',
+    det:'Risk score '+risk.score+'/100 — '+risk.flags[0]});
+  S.deals.unshift(d);
+  return d;
+}
+async function acceptDeal(id){
+  const d = S.deals.find(x=>x.id===id); if(!d || d.status!=='proposed') return;
+  const t = now();
+  d.acceptedAt = t;
+  d.hash = await sha256(dealPayload(d));
+  d.timeline.push({at:t,lab:'Accepted by receiver',kind:'good',
+    det:'Deal record sealed · SHA-256 '+d.hash.slice(0,12)+'…'});
+  if(d.risk.score>=50){
+    d.status='risk_hold'; d.holdUntil = new Date(t.getTime()+RISK_HOLD_MS);
+    d.timeline.push({at:t,lab:'Held before settlement',kind:'warn',
+      det:'Funds do not enter the receiver’s balance until the hold clears'});
+  } else { settle(d); }
+  render();
+}
+function settle(d){
+  const t = now();
+  d.status='paid'; d.paidAt=t;
+  addInflow(d.toVpa, d.amount, d.id);
+  d.timeline.push({at:t,lab:'Paid — funds available',kind:'good'});
+  const sp = checkSpike(d.toVpa);
+  if(sp){ setTimeout(()=>openSpikeModal(sp), 520); }
+}
+function declineDeal(id){
+  const d = S.deals.find(x=>x.id===id); if(!d) return;
+  d.status='declined';
+  d.timeline.push({at:now(),lab:'Bounced back by receiver',kind:'bad',
+    det:'Money never entered this account — no acceptance, no ownership'});
+  toast('Returned to sender. Nothing landed in your account.');
+  render();
+}
+function tickHolds(){
+  let changed=false;
+  S.deals.forEach(d=>{
+    if(d.status==='risk_hold' && now()>=d.holdUntil){ settle(d); changed=true; }
+  });
+  if(changed) render();
+}
+
+/* ---------- dispute ---------- */
+const SLA_MS = 72*3600*1000;
+function fileComplaint(dealId, victimName, ref){
+  const d = S.deals.find(x=>x.id===dealId); if(!d) return;
+  const t = now();
+  d.status='disputed';
+  d.dispute={filedAt:t, victim:victimName, ref, slaDueAt:new Date(t.getTime()+SLA_MS), outcome:null};
+  d.timeline.push({at:t,lab:'Disputed — complaint filed',kind:'bad',
+    det:ref+' · '+money(d.amount)+' put on hold. Rest of the account untouched.'});
+  render();
+}
+function resolveDispute(dealId, outcome){
+  const d = S.deals.find(x=>x.id===dealId); if(!d || !d.dispute) return;
+  const t = now();
+  d.dispute.outcome = outcome; d.dispute.resolvedAt = t;
+  if(outcome==='release'){
+    d.status='released';
+    d.timeline.push({at:t,lab:'Hold released — receiver cleared',kind:'good',
+      det:'Proof pack accepted in '+ago(d.dispute.filedAt,t)+', inside the 72-hour SLA'});
+    toast('Hold released. Full balance is usable again.');
+  } else {
+    d.status='returned';
+    AC.mule.frozen = true; AC.mule.balance = 0;
+    d.timeline.push({at:t,lab:'Funds returned to victim',kind:'bad',
+      det:money(d.amount)+' reversed to '+d.dispute.victim+'. Sender account frozen in full.'});
+    toast('Money returned to the victim. Sender account frozen.');
+  }
+  render();
+}
+
+/* ---------- spike detection ---------- */
+function checkSpike(vpa){
+  const st = inflowStats(vpa), r = todayRow(vpa);
+  if(!r || r.amount <= st.upper) return null;
+  if(S.spikes.some(s=>s.dateKey===r.key && s.vpa===vpa)) return null;
+  const sp = {id:'SPK-'+r.key.replace(/-/g,'')+'-01', vpa, dateKey:r.key, detectedAt:now(),
+    dayTotal:r.amount, upper:st.upper, median:st.median, multiple:r.amount/st.median,
+    dealIds:[...r.dealIds], versions:[], deferred:false};
+  S.spikes.push(sp);
+  return sp;
+}
+const curVer   = sp => sp.versions[sp.versions.length-1] || null;
+const firstVer = sp => sp.versions[0] || null;
+const lastEditedAt = sp => sp.versions.length>1 ? curVer(sp).savedAt : null;
+function spikeForDeal(id){ return S.spikes.find(s=>s.dealIds.includes(id)) || null; }
+function complaintTimeFor(sp){
+  let t=null;
+  sp.dealIds.forEach(id=>{
+    const d=S.deals.find(x=>x.id===id);
+    if(d && d.dispute && (!t || d.dispute.filedAt<t)) t=d.dispute.filedAt;
+  });
+  return t;
+}
+async function saveExplanation(sp, payload){
+  const t = now();
+  if(sp.versions.length) curVer(sp).replacedAt = t;
+  const n = sp.versions.length+1;
+  const v = {n, category:payload.category, text:payload.text, evidence:[...payload.evidence],
+             savedAt:t, replacedAt:null, hash:''};
+  v.hash = await sha256({spike:sp.id, version:n, category:v.category, text:v.text,
+                         evidence:v.evidence, saved_at:t.toISOString()});
+  sp.versions.push(v);
+}
+
+/* ---------- word-level diff between two versions ---------- */
+function wordDiff(oldT, newT){
+  const A = oldT.split(/(\s+)/), B = newT.split(/(\s+)/);
+  const n=A.length, m=B.length;
+  const L = Array.from({length:n+1},()=>new Uint16Array(m+1));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--)
+    L[i][j] = A[i]===B[j] ? L[i+1][j+1]+1 : Math.max(L[i+1][j], L[i][j+1]);
+  let i=0,j=0,out='';
+  const wrap=(cls,txt)=>txt.trim()?'<span class="'+cls+'">'+esc(txt)+'</span>':esc(txt);
+  while(i<n && j<m){
+    if(A[i]===B[j]){ out+=esc(A[i]); i++; j++; }
+    else if(L[i+1][j] >= L[i][j+1]){ out+=wrap('diffdel',A[i]); i++; }
+    else { out+=wrap('diffadd',B[j]); j++; }
+  }
+  while(i<n){ out+=wrap('diffdel',A[i]); i++; }
+  while(j<m){ out+=wrap('diffadd',B[j]); j++; }
+  return out;
+}
+
+/* ---------- small UI helpers ---------- */
+const $ = s => document.querySelector(s);
+function toast(msg){
+  const r=$('#toastRoot'); r.innerHTML='<div class="toast" role="status">'+esc(msg)+'</div>';
+  clearTimeout(toast._t); toast._t=setTimeout(()=>r.innerHTML='',3600);
+}
+function pill(kind,label,icon){
+  return '<span class="pill p-'+kind+'">'+(icon?icon:'')+esc(label)+'</span>';
+}
+const STATUS = {
+  proposed:['warn','Awaiting acceptance',I.clock],
+  risk_hold:['warn','Risk hold',I.clock],
+  paid:['ok','Paid · available',I.check],
+  closed:['ok','Closed',I.check],
+  disputed:['danger','Frozen — disputed',I.lock],
+  released:['ok','Hold released',I.check],
+  returned:['danger','Returned to victim',I.alert],
+  declined:['neutral','Bounced back',I.x]
+};
+const statusPill = d => pill(...STATUS[d.status]);
+
+/* ---------- inflow chart ---------- */
+function chartSVG(vpa){
+  const W=720,H=250,PL=48,PR=14,PT=32,PB=28;
+  const iw=W-PL-PR, ih=H-PT-PB;
+  const st=inflowStats(vpa), rows=rowsFor(vpa);
+  const peak=Math.max(...rows.map(r=>r.amount), st.upper);
+  const max=peak*1.18;
+  const y=v=>PT+ih-(v/max)*ih;
+  const slot=iw/rows.length, bw=Math.min(slot-6,30);
+  const bp=(x,yy,w,h,r)=>{r=Math.min(r,w/2,Math.max(h,0.01));
+    return 'M'+x+','+(yy+h)+'L'+x+','+(yy+r)+'Q'+x+','+yy+' '+(x+r)+','+yy+
+           'L'+(x+w-r)+','+yy+'Q'+(x+w)+','+yy+' '+(x+w)+','+(yy+r)+'L'+(x+w)+','+(yy+h)+'Z';}
+  let g='';
+  // y grid + ticks
+  const step = max>60000?20000:10000;
+  for(let v=0; v<=max; v+=step){
+    g+='<line x1="'+PL+'" y1="'+y(v).toFixed(1)+'" x2="'+(W-PR)+'" y2="'+y(v).toFixed(1)+
+       '" stroke="var(--grid)" stroke-width="1"/>'+
+       '<text x="'+(PL-8)+'" y="'+(y(v)+4).toFixed(1)+'" text-anchor="end" font-size="10" '+
+       'font-family="var(--mono)" fill="var(--ink-3)">'+(v?(v/1000)+'k':'0')+'</text>';
+  }
+  // normal-range ceiling
+  g+='<line x1="'+PL+'" y1="'+y(st.upper).toFixed(1)+'" x2="'+(W-PR)+'" y2="'+y(st.upper).toFixed(1)+
+     '" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="5 4"/>'+
+     '<text x="'+(PL+5)+'" y="'+(y(st.upper)-7).toFixed(1)+'" text-anchor="start" font-size="10.5" '+
+     'font-weight="600" font-family="var(--sans)" fill="var(--ink-2)">Normal ceiling for this account \u00B7 '+
+     (Math.round(st.upper/1000))+'k</text>';
+  // bars
+  rows.forEach((r,i)=>{
+    const x=PL+i*slot+(slot-bw)/2, h=Math.max((r.amount/max)*ih,2), yy=y(r.amount);
+    const sp=S.spikes.find(s=>s.dateKey===r.key && s.vpa===vpa);
+    const disputed=(r.dealIds||[]).some(id=>{const d=S.deals.find(x=>x.id===id);
+      return d&&['disputed','returned'].includes(d.status);});
+    let fill='var(--chart-1)', cls='normal';
+    if(sp){ fill = sp.versions.length && !disputed ? 'var(--chart-2)' : 'var(--chart-3)';
+            cls = sp.versions.length && !disputed ? 'explained' : 'flagged'; }
+    g+='<path class="bar" d="'+bp(x,yy,bw,h,4)+'" fill="'+fill+'" data-i="'+i+'" tabindex="0" role="img">'+
+       '<title>'+esc(fmtD(r.date))+' — '+esc(money(r.amount))+'</title></path>';
+    if(sp){
+      // status marker + direct label: never colour alone
+      g+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(yy-19).toFixed(1)+'" text-anchor="middle" '+
+         'font-size="13" font-weight="700" fill="'+fill+'">!</text>'+
+         '<text x="'+(x+bw/2).toFixed(1)+'" y="'+(yy-6).toFixed(1)+'" text-anchor="middle" font-size="10.5" '+
+         'font-weight="600" font-family="var(--mono)" fill="var(--ink)">'+esc(money(r.amount))+'</text>';
+    }
+    if(i%3===0 || i===rows.length-1){
+      g+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-9)+'" text-anchor="middle" font-size="10" '+
+         'font-family="var(--mono)" fill="var(--ink-3)">'+esc(fmtD(r.date))+'</text>';
+    }
+  });
+  g+='<line x1="'+PL+'" y1="'+(PT+ih)+'" x2="'+(W-PR)+'" y2="'+(PT+ih)+'" stroke="var(--line)" stroke-width="1.5"/>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Daily inflow for the last 14 days, '+
+    'with a dashed line marking the normal ceiling of '+Math.round(st.upper)+' rupees">'+g+'</svg>';
+}
+function chartBlock(vpa){
+  const st=inflowStats(vpa);
+  return '<div class="card" id="chartCard">'+
+    '<div class="card-hd"><h3>Daily inflow</h3>'+
+      '<span class="sub mono">median '+money(st.median)+'/day · last 14 days</span></div>'+
+    '<div class="chartwrap" id="chartWrap">'+chartSVG(vpa)+'<div class="tip" id="chartTip"></div></div>'+
+    '<div class="chart-legend">'+
+      '<span><i style="background:var(--chart-1)"></i>Within normal range</span>'+
+      '<span><i style="background:var(--chart-2)"></i>! Spike — explained</span>'+
+      '<span><i style="background:var(--chart-3)"></i>! Spike — unexplained or disputed</span>'+
+    '</div>'+
+    '<div class="note" style="margin-top:12px">'+I.info+'<div>The ceiling is not a fixed number. '+
+    'It is the median of this account’s own 14-day history plus three scaled median-absolute-deviations, '+
+    'so a studio that normally takes ₹2 lakh a day is never flagged for taking ₹2 lakh.</div></div>'+
+  '</div>';
+}
+function wireChart(vpa){
+  const wrap=$('#chartWrap'), tip=$('#chartTip'); if(!wrap) return;
+  const rows=rowsFor(vpa);
+  const show=(el)=>{
+    const r=rows[+el.dataset.i]; const sp=S.spikes.find(s=>s.dateKey===r.key && s.vpa===vpa);
+    const b=el.getBoundingClientRect(), w=wrap.getBoundingClientRect();
+    tip.innerHTML=esc(fmtD(r.date))+'<b>'+esc(money(r.amount))+'</b>'+
+      (sp?'<div style="margin-top:4px;opacity:.85">'+(sp.versions.length?'Explained by owner':'Awaiting explanation')+'</div>':'');
+    tip.style.left=(b.left-w.left+b.width/2)+'px';
+    tip.style.top=(b.top-w.top)+'px'; tip.classList.add('on');
+  };
+  wrap.querySelectorAll('.bar').forEach(el=>{
+    el.addEventListener('mouseenter',()=>show(el));
+    el.addEventListener('focus',()=>show(el));
+    el.addEventListener('mouseleave',()=>tip.classList.remove('on'));
+    el.addEventListener('blur',()=>tip.classList.remove('on'));
+    el.addEventListener('click',()=>{
+      const r=rows[+el.dataset.i]; const sp=S.spikes.find(s=>s.dateKey===r.key && s.vpa===vpa);
+      if(sp) sp.versions.length ? openHistory(sp) : openSpikeModal(sp);
+    });
+  });
+}
+
+/* ---------- modal infrastructure ---------- */
+function modal(inner, wide){
+  $('#modalRoot').innerHTML='<div class="scrim" role="dialog" aria-modal="true"><div class="modal'+
+    (wide?' wide':'')+'">'+inner+'</div></div>';
+  const scrim=$('.scrim');
+  scrim.addEventListener('mousedown',e=>{ if(e.target===scrim) closeModal(); });
+  const f=scrim.querySelector('textarea,input,select,button'); if(f) f.focus();
+}
+function closeModal(){ $('#modalRoot').innerHTML=''; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+
+const CATEGORIES = ['Festival or seasonal order surge','One unusually large client project',
+  'Several invoices cleared on the same day','Sale of equipment or assets',
+  'Loan or transfer from family','Refund or reversal received','Other'];
+const EVIDENCE = ['Signed contract or PO','Tax invoice','Delivery / completion proof',
+  'Client chat record','GST return for the period'];
+
+/* ---------- 1. the spike prompt ---------- */
+function openSpikeModal(sp){
+  const deals = sp.dealIds.map(id=>S.deals.find(d=>d.id===id)).filter(Boolean);
+  modal(
+    '<div class="modal-hd"><div class="alertmark am-warn">'+I.spark+'</div>'+
+      '<div><h3>Your inflow today is unusual</h3>'+
+      '<div class="mono" style="font-size:11.5px;color:var(--ink-3);margin-top:2px">'+esc(sp.id)+'</div></div>'+
+      '<button class="modal-x" onclick="deferSpike(\''+sp.id+'\')" aria-label="Close">'+I.x+'</button></div>'+
+    '<p class="modal-lead">Nairaa Design Studio has taken <b class="mono">'+money(sp.dayTotal)+
+      '</b> today — about <b>'+sp.multiple.toFixed(1)+'×</b> your usual '+money(sp.median)+
+      ' a day. Nothing is wrong and nothing is blocked. Tell us why now, and if a complaint '+
+      'ever touches one of these payments your answer is already on record, timestamped.</p>'+
+    (deals.length?'<div class="note" style="margin-bottom:14px">'+I.info+'<div><b>What moved today:</b><br>'+
+      deals.map(d=>esc(d.purpose)+' — '+money(d.amount)+' from '+esc(d.fromName)).join('<br>')+
+      '</div></div>':'')+
+    explanationForm(sp,null)+
+    '<div class="modal-ft">'+
+      '<button class="btn btn-ghost" onclick="deferSpike(\''+sp.id+'\')">Not now</button>'+
+      '<button class="btn btn-pri" onclick="submitExplanation(\''+sp.id+'\')">Submit explanation</button>'+
+    '</div>'
+  );
+}
+function explanationForm(sp, v){
+  return '<div class="field"><label for="spkCat">What caused it?</label>'+
+    '<select id="spkCat">'+CATEGORIES.map(c=>'<option'+(v&&v.category===c?' selected':'')+'>'+
+      esc(c)+'</option>').join('')+'</select></div>'+
+    '<div class="field"><label for="spkTxt">In your own words</label>'+
+    '<textarea id="spkTxt" placeholder="e.g. Diwali campaign work for three retail clients invoiced together.">'+
+      esc(v?v.text:'')+'</textarea>'+
+    '<span class="hint">Write it the way you would explain it to your bank. You can edit this later — '+
+    'every version is kept with its own timestamp.</span></div>'+
+    '<div class="field"><label>Supporting documents you can produce</label>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:7px">'+EVIDENCE.map((e,i)=>
+      '<label class="pill p-neutral" style="cursor:pointer;padding:6px 11px;font-weight:500">'+
+      '<input type="checkbox" class="spkEv" value="'+esc(e)+'"'+
+      (v&&v.evidence.includes(e)?' checked':'')+' style="margin:0 5px 0 0;accent-color:var(--cyprus)">'+
+      esc(e)+'</label>').join('')+'</div></div>';
+}
+function readForm(){
+  return {category:$('#spkCat').value, text:$('#spkTxt').value.trim(),
+    evidence:[...document.querySelectorAll('.spkEv:checked')].map(c=>c.value)};
+}
+async function submitExplanation(id){
+  const sp=S.spikes.find(s=>s.id===id); const p=readForm();
+  if(!p.text){ $('#spkTxt').focus(); toast('Add a line or two so the record means something.'); return; }
+  await saveExplanation(sp,p);
+  closeModal(); render();
+  toast('Explanation recorded and timestamped.');
+}
+function deferSpike(id){
+  const sp=S.spikes.find(s=>s.id===id); if(sp) sp.deferred=true;
+  closeModal(); render();
+}
+
+/* ---------- 2. editing, with a visible last-edited time ---------- */
+function openEditModal(id){
+  const sp=S.spikes.find(s=>s.id===id), v=curVer(sp);
+  const ct=complaintTimeFor(sp);
+  modal(
+    '<div class="modal-hd"><div class="alertmark am-warn">'+I.pencil+'</div>'+
+      '<div><h3>Edit your explanation</h3>'+
+      '<div class="mono" style="font-size:11.5px;color:var(--ink-3);margin-top:2px">'+esc(sp.id)+
+      ' · version '+v.n+' of '+v.n+'</div></div>'+
+      '<button class="modal-x" onclick="closeModal()" aria-label="Close">'+I.x+'</button></div>'+
+    '<p class="modal-lead">Your earlier version is not overwritten. It stays in the record with the '+
+      'time it was replaced, and the new one is stamped with the time you save it.</p>'+
+    (ct?'<div class="note" style="margin-bottom:14px;background:var(--lotus-soft);color:var(--lotus-ink)">'+
+      I.alert+'<div>A complaint has already been filed against a payment from this day. You can still '+
+      'edit, but this version will be marked <b>edited after the complaint</b> for the reviewer. '+
+      'Correcting a typo is fine; changing your story will be visible.</div></div>':'')+
+    explanationForm(sp,v)+
+    '<div class="modal-ft">'+
+      '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'+
+      '<button class="btn btn-pri" onclick="saveEdit(\''+sp.id+'\')">Save new version</button>'+
+    '</div>'
+  );
+}
+async function saveEdit(id){
+  const sp=S.spikes.find(s=>s.id===id), p=readForm(), old=curVer(sp);
+  if(!p.text){ toast('The explanation cannot be emptied.'); return; }
+  if(p.text===old.text && p.category===old.category &&
+     p.evidence.join()===old.evidence.join()){ closeModal(); toast('Nothing changed.'); return; }
+  await saveExplanation(sp,p);
+  closeModal(); render();
+  toast('Saved. Last edited ' + fmtDT(curVer(sp).savedAt) + '.');
+}
+
+/* ---------- 3. the edit history ---------- */
+function openHistory(sp){
+  const ct=complaintTimeFor(sp), first=firstVer(sp);
+  let head='';
+  if(ct && first){
+    const before = first.savedAt < ct;
+    head = '<div class="note" style="margin-bottom:15px;background:'+
+      (before?'var(--ok-soft)':'var(--lotus-soft)')+';color:'+(before?'var(--ok-ink)':'var(--lotus-ink)')+'">'+
+      (before?I.shield:I.alert)+'<div><b>'+(before
+        ? 'The original explanation pre-dates the complaint by '+ago(first.savedAt,ct)+'.'
+        : 'The original explanation was written after the complaint was filed.')+'</b><br>'+
+      (before
+        ? 'It could not have been written to answer a complaint that did not exist yet, which is what '
+          +'makes it worth something as evidence.'
+        : 'A reviewer should weigh it accordingly.')+'</div></div>';
+  }
+  const rows = sp.versions.map((v,i)=>{
+    const after = ct && v.savedAt > ct;
+    const isCur = i===sp.versions.length-1;
+    const prev = i>0 ? sp.versions[i-1] : null;
+    return '<div class="ver'+(isCur?' current':'')+(after?' after-complaint':'')+'">'+
+      '<div class="ver-hd"><span class="ver-n">Version '+v.n+'</span>'+
+        (i===0?pill('neutral','Original'):'')+
+        (isCur?pill('ok','Current',I.check):'')+
+        (after?pill('danger','Saved after complaint',I.alert):(ct?pill('ok','Before complaint',I.shield):''))+
+        '<span class="pill p-cyprus">'+esc(v.category)+'</span></div>'+
+      '<div class="ver-body">'+(prev?wordDiff(prev.text,v.text):esc(v.text))+'</div>'+
+      (v.evidence.length?'<div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap">'+
+        v.evidence.map(e=>pill('neutral',e)).join('')+'</div>':'')+
+      '<div class="ver-times"><span>saved '+fmtDT(v.savedAt)+'</span>'+
+        (v.replacedAt?'<span>replaced '+fmtDT(v.replacedAt)+'</span>':'<span>still current</span>')+
+        '<span>sha-256 '+v.hash.slice(0,16)+'…</span></div>'+
+    '</div>';
+  }).join('');
+  modal(
+    '<div class="modal-hd"><div class="alertmark am-ok">'+I.clock+'</div>'+
+      '<div><h3>Edit history</h3><div class="mono" style="font-size:11.5px;color:var(--ink-3);margin-top:2px">'+
+      esc(sp.id)+' · '+sp.versions.length+' version'+(sp.versions.length>1?'s':'')+'</div></div>'+
+      '<button class="modal-x" onclick="closeModal()" aria-label="Close">'+I.x+'</button></div>'+
+    '<p class="modal-lead">Every version the owner ever saved, oldest first, each with its own hash. '+
+      'Changed words are marked. Nothing here can be deleted.</p>'+
+    head + rows +
+    '<div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>', true);
+}
+
+/* ---------- explanation card (shown on both payee and reviewer sides) ---------- */
+function explanationCard(sp, canEdit){
+  const v=curVer(sp), edited=lastEditedAt(sp), ct=complaintTimeFor(sp);
+  if(!v){
+    return '<div class="spike-card" style="box-shadow:inset 3px 0 0 var(--lotus),var(--shadow-1)">'+
+      '<div class="ver-hd">'+pill('danger','Spike not explained',I.alert)+
+      '<span class="mono" style="font-size:11px;color:var(--ink-3)">'+esc(sp.id)+'</span></div>'+
+      '<p style="font-size:13.5px;color:var(--ink-2);margin-top:7px">'+money(sp.dayTotal)+' on '+
+      esc(fmtD(new Date(sp.dateKey+'T06:00:00Z')))+', '+sp.multiple.toFixed(1)+
+      '× the usual day. No explanation on record'+(sp.deferred?' — owner chose to answer later':'')+'.</p>'+
+      (canEdit?'<div style="margin-top:11px"><button class="btn btn-pri btn-sm" onclick="openSpikeModal(S.spikes.find(s=>s.id===\''+
+        sp.id+'\'))">Explain this spike</button></div>':'')+'</div>';
+  }
+  return '<div class="spike-card">'+
+    '<div class="ver-hd">'+pill('warn','Inflow spike · '+sp.multiple.toFixed(1)+'× normal',I.spark)+
+      '<span class="pill p-cyprus">'+esc(v.category)+'</span>'+
+      (ct && firstVer(sp).savedAt<ct ? pill('ok','Filed before the complaint',I.shield):'')+
+      (ct && sp.versions.some(x=>x.savedAt>ct) ? pill('danger','Edited after complaint',I.alert):'')+
+    '</div>'+
+    '<p class="spike-quote">'+esc(v.text)+'</p>'+
+    (v.evidence.length?'<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+      v.evidence.map(e=>pill('neutral',e)).join('')+'</div>':'')+
+    '<div class="editline">'+
+      (edited
+        ? '<span class="pencil">'+I.pencil+'</span><span>Edited · last edited '+fmtDT(edited)+'</span>'
+        : '<span>Submitted '+fmtDT(v.savedAt)+'</span>')+
+      '<span style="opacity:.55">·</span>'+
+      '<button class="btn-link" onclick="openHistory(S.spikes.find(s=>s.id===\''+sp.id+'\'))">'+
+        sp.versions.length+' version'+(sp.versions.length>1?'s':'')+' · view history</button>'+
+      (canEdit?'<button class="btn-link" style="margin-left:auto" onclick="openEditModal(\''+sp.id+
+        '\')">Edit</button>':'')+
+    '</div>'+
+  '</div>';
+}
+
+/* the account behind the current session — every view reads through this */
+const me = () => (S.auth && AC[S.auth.acKey]) || AC.payee;
+
+/* ---------- comparison: old system vs this one ---------- */
+function comparisonBlock(vpa){
+  const f=payeeFunds(vpa), pct=f.total?Math.round(f.hold/f.total*100):0;
+  const disputed=f.hold>0;
+  return '<div class="card" id="cmpCard"><div class="card-hd"><h3>What gets frozen</h3>'+
+    '<span class="sub">'+(disputed?'live, for the open dispute':'shown for a '+money(38000)+' dispute')+'</span></div>'+
+    '<div class="cmp">'+
+      '<div class="cmp-side cmp-old"><div class="cmp-h">'+
+        '<span style="width:13px;height:13px;display:inline-block">'+I.lock+'</span>'+
+        'TODAY · SECTION 102 BNSS</div>'+
+        '<div class="cmp-stack"><span class="st-frozen" style="height:100%">'+
+          money(disputed?f.total:f.total)+' frozen</span></div>'+
+        '<div class="cmp-fact">'+I.alert+'<div>The entire account is locked because one credit is disputed.</div></div>'+
+        '<div class="cmp-fact">'+I.clock+'<div>Median time to release, once a case is opened: <b>weeks</b>. '+
+          'Rent, salaries and supplier payments all stop.</div></div>'+
+      '</div>'+
+      '<div class="cmp-side cmp-new"><div class="cmp-h">'+
+        '<span style="width:13px;height:13px;display:inline-block">'+I.shield+'</span>'+
+        'WITH THE DEAL-ID LAYER</div>'+
+        '<div class="cmp-stack">'+
+          '<span class="st-free" style="height:'+(disputed?100-pct:85)+'%">'+
+            money(disputed?f.available:Math.max(0,f.total-38000))+' usable</span>'+
+          '<span class="st-frozen" style="height:'+(disputed?pct:15)+'%">'+
+            money(disputed?f.hold:38000)+' held</span></div>'+
+        '<div class="cmp-fact">'+I.check+'<div>Only the disputed Deal ID is held. '+
+          (disputed?'That is '+pct+'% of the balance — the other '+(100-pct)+'% never stopped moving.'
+                   :'Everything else keeps working.')+'</div></div>'+
+        '<div class="cmp-fact">'+I.clock+'<div>Proof pack is already assembled, so the clock is a '+
+          '<b>72-hour SLA</b>, not an open-ended wait.</div></div>'+
+      '</div>'+
+    '</div></div>';
+}
+
+/* ---------- PAYER ---------- */
+const payerActor='mule';   // set by the signed-in payer account
+function renderPayer(){
+  const a=me();
+  const sent=S.deals.filter(d=>d.fromVpa===a.vpa);      // only payments I sent
+  const frozen=a.frozen;
+  return '<div class="grid g-main">'+
+    '<div class="grid" style="align-content:start">'+
+      (frozen?'<div class="card" style="background:var(--lotus-soft)">'+
+        '<div class="ver-hd">'+pill('danger','Account frozen in full',I.lock)+'</div>'+
+        '<p style="font-size:13.5px;color:var(--lotus-ink);margin-top:8px">This account was named as the '+
+        'source of the stolen funds. Every rupee is frozen, the device fingerprint '+esc(a.device)+
+        ' is blocked, and the Deal ID trail below shows exactly where the money went. '+
+        '<b>This is who the freeze is supposed to land on.</b></p>'+
+        '<p style="font-size:12.5px;color:var(--lotus-ink);margin-top:10px;opacity:.85">'+
+        'A frozen account cannot propose payments, so the form below is disabled. '+
+        'Reset the demo to start a fresh run.</p>'+
+        '<button class="btn btn-ghost btn-sm" style="margin-top:11px" onclick="resetDemo()">'+
+        'Reset demo</button></div>':'')+
+      '<div class="card"><div class="card-hd"><h3>Propose a payment</h3>'+
+        '<span class="sub">medium and large transfers only</span></div>'+
+        '<div class="field"><label>Acting as</label>'+
+          '<div class="row" style="margin:0"><div class="row-main"><div class="row-title">'+
+          esc(a.name)+'</div><div class="row-meta mono">'+esc(a.biz||'')+' · '+esc(a.vpa)+
+          '</div></div><div style="align-self:center">'+pill('neutral','signed in',I.check)+
+          '</div></div></div>'+
+        '<div class="field"><label for="pAmt">Amount</label>'+
+          '<input id="pAmt" type="number" inputmode="numeric" value="38000" oninput="previewRisk()"></div>'+
+        '<div class="field"><label for="pPur">What is this for?</label>'+
+          '<input id="pPur" value="Office furniture — advance payment" oninput="previewRisk()"></div>'+
+        '<div class="field"><label>Receiver</label>'+
+          '<div class="row" style="margin:0"><div class="row-main"><div class="row-title">'+
+          esc(AC.payee.biz)+'</div><div class="row-meta mono">'+esc(AC.payee.vpa)+' · '+
+          esc(AC.payee.kyc)+'</div></div></div></div>'+
+        '<div id="riskPrev"></div>'+
+        '<button class="btn btn-pri" style="width:100%;margin-top:6px" '+(frozen?'disabled':'')+
+          ' onclick="doPropose()">Propose payment</button>'+
+        '<p class="hint" style="margin-top:9px">The money does not move yet. '+
+          (esc(AC.payee.name))+' has to accept it first — that acceptance is what creates the Deal ID.</p>'+
+      '</div>'+
+      '<div class="card"><div class="card-hd"><h3>Payments sent</h3></div>'+
+        (sent.length?'<div class="rows">'+sent.map(dealRow).join('')+'</div>'
+                    :'<div class="empty">Nothing proposed yet.</div>')+'</div>'+
+    '</div>'+
+    '<div class="grid" style="align-content:start">'+
+      '<div class="card hi"><div class="eyebrow">'+esc(a.biz||a.name)+'</div>'+
+        '<div class="bal-total" style="margin-top:6px">Balance</div>'+
+        '<div class="bal-amount"'+(frozen?' style="color:var(--lotus)"':'')+'>'+money(a.balance)+'</div>'+
+        '<div style="margin-top:10px">'+(frozen?pill('danger','Fully frozen',I.lock)
+          :pill('ok','Operating normally',I.check))+'</div>'+
+        '<dl class="kv" style="margin-top:14px"><dt>UPI</dt><dd>'+esc(a.vpa)+'</dd>'+
+        '<dt>KYC</dt><dd>'+esc(a.kyc)+'</dd><dt>Device / IP</dt><dd>'+esc(a.device)+'</dd>'+
+        '<dt>Account age</dt><dd>'+esc(a.age)+'</dd></dl></div>'+
+      (frozen?moneyTrail():'')+
+    '</div>'+
+  '</div>';
+}
+function previewRisk(){
+  const amt=+($('#pAmt')||{}).value||0;
+  const r=scoreRisk(amt,S.auth.acKey);
+  const el=$('#riskPrev'); if(!el) return;
+  const kind = r.score>=50?'danger':r.score>=25?'warn':'ok';
+  el.innerHTML='<div class="note" style="margin-bottom:12px;background:var(--'+
+    (kind==='danger'?'lotus-soft':kind==='warn'?'warn-soft':'ok-soft')+')">'+
+    (kind==='ok'?I.check:I.alert)+'<div><b>Risk score '+r.score+'/100</b>'+
+    (r.score>=50?' — this will be held briefly before it settles':' — settles immediately on acceptance')+
+    (r.flags.length?'<br>'+r.flags.map(f=>'· '+esc(f)).join('<br>'):'')+'</div></div>';
+}
+function doPropose(){
+  const amt=+$('#pAmt').value, pur=$('#pPur').value.trim()||'Payment';
+  if(!amt||amt<1){ toast('Enter an amount.'); return; }
+  const d=proposeDeal(S.auth.acKey,amt,pur);
+  render();
+  toast('Proposed. Waiting for '+AC.payee.name+' to accept.');
+  return d;
+}
+
+/* ---------- deal row ---------- */
+function dealRow(d){
+  const cls = ['disputed','returned'].includes(d.status)?' is-frozen'
+            : d.status==='risk_hold'?' is-hold':'';
+  let extra='';
+  if(d.status==='risk_hold'){
+    extra='<div class="row-meta"><span class="mono" data-hold="'+d.id+'">—</span>'+
+      ' until settlement · a fraud report now would stop it landing</div>';
+  }
+  return '<div class="row'+cls+'">'+
+    '<div class="row-main"><div class="row-title">'+esc(d.purpose)+' '+statusPill(d)+'</div>'+
+    '<div class="row-meta"><span class="dealid">'+esc(d.id)+'</span>'+
+      '<span>'+esc(d.fromName)+'</span><span>'+fmtDT(d.proposedAt)+'</span></div>'+extra+
+    (d.hash?'<div class="hashline" style="margin-top:5px">sha-256 '+d.hash.slice(0,32)+'…</div>':'')+
+    '</div>'+
+    '<div class="row-amt">'+money(d.amount)+'</div>'+
+    '<div class="row-actions">'+
+      (d.status==='proposed'&&S.role==='payee'
+        ? '<button class="btn btn-ok btn-sm" onclick="acceptDeal(\''+d.id+'\')">Accept</button>'+
+          '<button class="btn btn-ghost btn-sm" onclick="declineDeal(\''+d.id+'\')">Bounce back</button>':'')+
+      '<button class="btn btn-ghost btn-sm" onclick="openTimeline(\''+d.id+'\')">Audit trail</button>'+
+    '</div></div>';
+}
+function openTimeline(id){
+  const d=S.deals.find(x=>x.id===id);
+  modal('<div class="modal-hd"><div class="alertmark am-ok">'+I.shield+'</div>'+
+    '<div><h3>'+esc(d.purpose)+'</h3><div class="mono" style="font-size:11.5px;color:var(--ink-3);margin-top:2px">'+
+    esc(d.id)+'</div></div><button class="modal-x" onclick="closeModal()" aria-label="Close">'+I.x+'</button></div>'+
+    '<div style="margin:6px 0 16px">'+statusPill(d)+'</div>'+
+    '<ul class="tl">'+d.timeline.map(e=>'<li class="'+(e.kind||'')+'">'+
+      '<div class="t-lab">'+esc(e.lab)+'</div><div class="t-time">'+fmtDT(e.at)+'</div>'+
+      (e.det?'<div class="t-det">'+esc(e.det)+'</div>':'')+'</li>').join('')+'</ul>'+
+    '<div class="modal-ft"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>');
+}
+
+/* ---------- PAYEE ---------- */
+function renderPayee(){
+  const acct=me(), vpa=acct.vpa;
+  const f=payeeFunds(vpa);
+  const mine=S.deals.filter(d=>d.toVpa===vpa);          // only money addressed to me
+  const inbox=mine.filter(d=>d.status==='proposed');
+  const held=mine.filter(d=>d.status==='risk_hold');
+  const rest=mine.filter(d=>!['proposed'].includes(d.status));
+  const pctOk=f.total?(f.available/f.total*100):100;
+  const mySpikes=S.spikes.filter(s=>s.vpa===vpa);
+  const unexplained=mySpikes.filter(s=>!s.versions.length);
+  return (unexplained.length?'<div class="card" style="background:var(--warn-soft);margin-bottom:14px">'+
+      '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+
+      '<div class="alertmark am-warn">'+I.spark+'</div>'+
+      '<div style="flex:1 1 220px"><b style="font-size:14px">An unusual inflow day is waiting on you</b>'+
+      '<div style="font-size:13px;color:var(--warn-ink);margin-top:2px">Explaining it now costs a minute. '+
+      'Explaining it after a complaint arrives is worth far less.</div></div>'+
+      '<button class="btn btn-pri" onclick="openSpikeModal(S.spikes.filter(s=>s.vpa===me().vpa&&!s.versions.length)[0])">Explain now</button>'+
+      '</div></div>':'')+
+    '<div class="card hi" id="balCard" style="margin-bottom:14px">'+
+      '<div class="bal-head"><div><div class="eyebrow">'+esc(acct.biz||acct.name)+'</div>'+
+        '<div class="bal-total" style="margin-top:5px">Total in account</div>'+
+        '<div class="bal-amount">'+money(f.total)+'</div></div>'+
+        '<div style="margin-left:auto;text-align:right">'+
+        (f.hold>0?pill('danger',money(f.hold)+' on hold',I.lock):pill('ok','Nothing held',I.check))+'</div></div>'+
+      '<div class="bal-bar"><span class="seg-ok" style="width:'+pctOk+'%"></span>'+
+        '<span class="seg-hold" style="width:'+(100-pctOk)+'%"></span></div>'+
+      '<div class="bal-split">'+
+        '<div class="bal-item"><div class="k">'+ico(I.check)+'Available to spend</div>'+
+          '<div class="v" style="color:var(--ok)">'+money(f.available)+'</div>'+
+          '<div class="n">Salaries, rent and suppliers all still go out</div></div>'+
+        '<div class="bal-item'+(f.hold>0?' is-hold':'')+'"><div class="k">'+ico(I.lock)+'On hold</div>'+
+          '<div class="v">'+money(f.hold)+'</div>'+
+          '<div class="n">'+(f.hold>0?'One disputed Deal ID, nothing else':'No dispute against this account')+'</div></div>'+
+      '</div></div>'+
+    (inbox.length?'<div class="card" style="margin-bottom:14px"><div class="card-hd">'+
+      '<h3>Waiting for your decision</h3><span class="sub">money has not moved yet</span></div>'+
+      '<div class="rows">'+inbox.map(dealRow).join('')+'</div>'+
+      '<div class="note" style="margin-top:12px">'+I.info+'<div>Until you accept, this money is not yours '+
+      'and cannot be dumped on you. Bouncing it back leaves no trace on your account.</div></div></div>':'')+
+    (held.length?'<div class="card" style="margin-bottom:14px"><div class="card-hd">'+
+      '<h3>Settling shortly</h3><span class="sub">held because the sender looked risky</span></div>'+
+      '<div class="rows">'+held.map(dealRow).join('')+'</div></div>':'')+
+    '<div class="grid g-main" style="margin-bottom:14px">'+
+      chartBlock(vpa)+
+      '<div class="card" style="align-self:start"><div class="card-hd"><h3>Spike explanations</h3></div>'+
+        (mySpikes.length?mySpikes.map(s=>explanationCard(s,true)).join('')
+          :'<div class="empty">No unusual days. When one shows up, you will be asked about it here.</div>')+
+        '<div class="note" style="margin-top:12px">'+I.shield+'<div>The RBI’s draft framework gives you '+
+        '<b>20 days to explain a flagged transaction</b> after you are flagged. This asks on the day it '+
+        'happens — so the answer is already there, and dated, before anyone accuses you.</div></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card" style="margin-bottom:14px"><div class="card-hd"><h3>Deal ledger</h3>'+
+      '<span class="sub">'+rest.length+' records</span></div>'+
+      (rest.length?'<div class="rows">'+rest.map(dealRow).join('')+'</div>':'<div class="empty">Nothing yet.</div>')+
+    '</div>'+
+    comparisonBlock(vpa);
+}
+const ico = s => '<span style="width:12px;height:12px;display:inline-block">'+s+'</span>';
+
+/* ---------- money trail ---------- */
+function moneyTrail(){
+  const d=S.deals.find(x=>x.dispute);
+  return '<div class="card"><div class="card-hd"><h3>Where the money went</h3>'+
+    '<span class="sub">Deal ID trail</span></div>'+
+    '<div class="flow">'+
+      '<div class="flow-node"><b>'+esc(AC.victim.name)+'</b><span>victim</span></div>'+
+      '<span class="flow-arrow">→</span>'+
+      '<div class="flow-node bad"><b>QuickCash</b><span>frozen in full</span></div>'+
+      '<span class="flow-arrow">→</span>'+
+      '<div class="flow-node good"><b>Nairaa Studio</b><span>'+(d&&d.status==='released'
+        ?'cleared':'one deal held')+'</span></div>'+
+    '</div>'+
+    '<p style="font-size:12.5px;color:var(--ink-2);margin-top:12px">Every hop carries its own Deal ID, '+
+    'so the chain is followable without freezing anyone standing on it.</p></div>';
+}
+
+/* ---------- proof pack ---------- */
+function proofPack(d){
+  const sp=spikeForDeal(d.id);
+  const left=Math.max(0,d.dispute.slaDueAt-now());
+  const urgent=left < SLA_MS*0.25;
+  return '<div class="card" style="margin-bottom:14px">'+
+    '<div class="card-hd"><h3>Proof pack</h3><span class="sub mono">'+esc(d.id)+'</span></div>'+
+    '<div class="sla'+(urgent?' urgent':'')+'" data-sla="'+d.id+'" style="margin-bottom:15px">'+
+      '<div><div class="eyebrow">Review SLA</div>'+
+        '<div class="sla-clock" data-slaclock="'+d.id+'">--:--:--</div></div>'+
+      '<div class="sla-track"><i data-slabar="'+d.id+'" style="width:100%"></i></div>'+
+      '<div style="font-size:12px;color:var(--ink-3)">Filed '+fmtDT(d.dispute.filedAt)+'</div></div>'+
+    '<div class="note" style="margin-bottom:14px">'+I.info+'<div>Assembled automatically the moment the '+
+      'complaint named this Deal ID. Nothing here was requested from the receiver.</div></div>'+
+    '<dl class="kv" style="margin-bottom:14px">'+
+      '<dt>Disputed amount</dt><dd>'+money(d.amount)+' of '+money(payeeFunds(d.toVpa).total)+' in the account</dd>'+
+      '<dt>Purpose on record</dt><dd>'+esc(d.purpose)+'</dd>'+
+      '<dt>Sender</dt><dd>'+esc(d.fromName)+' · '+esc(d.fromVpa)+'</dd>'+
+      '<dt>Receiver</dt><dd>'+esc(AC.payee.biz)+' · '+esc(AC.payee.kyc)+'</dd>'+
+      '<dt>Proposed</dt><dd>'+fmtDT(d.proposedAt)+'</dd>'+
+      '<dt>Accepted</dt><dd>'+(d.acceptedAt?fmtDT(d.acceptedAt)+' · receiver device '+esc(AC.payee.device):'—')+'</dd>'+
+      '<dt>Risk at the time</dt><dd>'+d.risk.score+'/100'+(d.risk.flags.length?' · '+esc(d.risk.flags[0]):'')+'</dd>'+
+      '<dt>Record hash</dt><dd class="hashline">'+esc(d.hash)+'</dd>'+
+    '</dl>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
+      '<button class="btn btn-ghost btn-sm" onclick="verifyDeal(\''+d.id+'\')">Verify hash against record</button>'+
+      '<button class="btn btn-ghost btn-sm" onclick="tamper(\''+d.id+'\')">'+
+        (d.tampered?'Undo tamper':'Simulate a tampered record')+'</button></div>'+
+    '<div id="vr-'+d.id+'">'+(d.verify?verifyLine(d):'')+'</div>'+
+    '<div style="margin-top:16px"><div class="eyebrow" style="margin-bottom:8px">'+
+      'Owner’s explanation for that day’s inflow</div>'+
+      (sp?explanationCard(sp,false)
+        :'<div class="empty">This day was inside the account’s normal range — no explanation was asked for.</div>')+
+    '</div>'+
+    '<div class="modal-ft" style="justify-content:flex-start;margin-top:18px">'+
+      '<button class="btn btn-ok" onclick="resolveDispute(\''+d.id+'\',\'release\')">Approve — release the hold</button>'+
+      '<button class="btn btn-danger" onclick="resolveDispute(\''+d.id+'\',\'return\')">Reject — return to victim</button>'+
+    '</div></div>';
+}
+function verifyLine(d){
+  const ok=d.verify.ok;
+  return '<div class="note" style="background:var(--'+(ok?'ok-soft':'lotus-soft')+');color:var(--'+
+    (ok?'ok-ink':'lotus-ink')+')">'+(ok?I.check:I.alert)+'<div><b>'+
+    (ok?'Hash matches — the record is unaltered.':'Hash mismatch — this record has been changed since it was sealed.')+
+    '</b><br>recomputed '+esc(d.verify.got.slice(0,40))+'…</div></div>';
+}
+async function verifyDeal(id){
+  const d=S.deals.find(x=>x.id===id);
+  const got=await sha256(dealPayload(d));
+  d.verify={ok:got===d.hash, got};
+  const el=document.getElementById('vr-'+id); if(el) el.innerHTML=verifyLine(d);
+  toast(d.verify.ok?'Record verified intact.':'Tampering detected.');
+}
+function tamper(id){
+  const d=S.deals.find(x=>x.id===id);
+  d.tampered=!d.tampered;
+  d.purpose = d.tampered ? d.purpose+' (amended)' : d.purpose.replace(/ \(amended\)$/,'');
+  d.verify=null; render();
+  toast(d.tampered?'Record altered. Now verify the hash.':'Record restored.');
+}
+
+/* ---------- REVIEWER ---------- */
+function renderReviewer(){
+  const open=S.deals.filter(d=>d.status==='disputed');
+  const done=S.deals.filter(d=>['released','returned'].includes(d.status));
+  const targets=S.deals.filter(d=>['paid','risk_hold','closed'].includes(d.status));
+  return '<div class="card" style="margin-bottom:14px"><div class="card-hd">'+
+      '<h3>File a fraud complaint</h3><span class="sub">against a Deal ID, not an account</span></div>'+
+      '<div class="grid g-2">'+
+        '<div><div class="field"><label for="cDeal">Deal ID named in the complaint</label>'+
+          '<select id="cDeal">'+(targets.length?targets.map(d=>'<option value="'+d.id+'">'+
+            esc(d.id)+' — '+money(d.amount)+' · '+esc(d.purpose)+'</option>').join('')
+            :'<option value="">No settled deals yet</option>')+'</select></div>'+
+          '<div class="field"><label for="cVic">Complainant</label>'+
+          '<input id="cVic" value="'+esc(AC.victim.name)+'"></div></div>'+
+        '<div><div class="field"><label for="cRef">Complaint reference</label>'+
+          '<input id="cRef" value="NCRP-2026-0918-44192"></div>'+
+          '<div class="field"><label for="cAmt">Amount disputed</label>'+
+          '<input id="cAmt" value="as recorded on the Deal ID" disabled></div></div>'+
+      '</div>'+
+      '<button class="btn btn-danger" onclick="doComplaint()" '+(targets.length?'':'disabled')+'>'+
+        'Freeze this Deal ID only</button>'+
+      '<div class="note" style="margin-top:12px">'+I.info+'<div>Under Section 102 BNSS the lawful object '+
+        'is the proceeds of crime — not every rupee that happens to sit beside them. A Deal ID makes '+
+        'that distinction machine-readable for the first time.</div></div>'+
+    '</div>'+
+    (open.length?open.map(proofPack).join(''):'')+
+    (done.length?'<div class="card" style="margin-bottom:14px"><div class="card-hd"><h3>Resolved</h3></div>'+
+      '<div class="rows">'+done.map(dealRow).join('')+'</div></div>':'')+
+    (AC.mule.frozen?moneyTrail():'')+
+    comparisonBlock(AC.payee.vpa);
+}
+function doComplaint(){
+  const id=$('#cDeal').value; if(!id) return;
+  fileComplaint(id, $('#cVic').value||'Complainant', $('#cRef').value||'NCRP');
+  toast('Only '+money(S.deals.find(d=>d.id===id).amount)+' held. The rest of the account is untouched.');
+}
+
+/* ---------- authentication screen ---------- */
+function authTabs(){
+  const t=S.ui.tab;
+  return '<div class="tabs" role="tablist">'+
+    '<button role="tab" aria-selected="'+(t==='signin')+'" onclick="setTab(\'signin\')">Sign in</button>'+
+    '<button role="tab" aria-selected="'+(t==='signup')+'" onclick="setTab(\'signup\')">Create account</button>'+
+  '</div>';
+}
+function renderAuth(){
+  const f=S.ui.form;
+  return '<div class="login-wrap"><div class="login-card">'+
+    '<div class="acct-av" style="width:42px;height:42px;border-radius:13px;margin-bottom:14px">'+
+      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">'+
+      '<path d="M12 3l7.5 3.2v5c0 4.5-3 8-7.5 9.3C7.5 19.2 4.5 15.7 4.5 11.2v-5L12 3z" stroke-linejoin="round"/>'+
+      '<path d="M8.9 12.2l2.1 2.1 4.1-4.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'+
+    '<h2>'+(S.ui.tab==='signin'?'Sign in to the Deal-ID layer':'Create your account')+'</h2>'+
+    '<p class="login-lead">'+(S.ui.tab==='signin'
+      ? 'Your role is held on your account, not chosen at sign-in, so nobody can pick their way into another workspace.'
+      : 'Choose the role this account will hold. It is fixed at registration and decides the only workspace this login can ever open.')+'</p>'+
+    authTabs()+
+    (S.ui.err?'<div class="login-err">'+I.alert+'<div>'+esc(S.ui.err)+'</div></div>':'')+
+    (S.ui.ok?'<div class="login-ok">'+I.check+'<div>'+esc(S.ui.ok)+'</div></div>':'')+
+    (S.ui.tab==='signin'?signinForm(f):signupForm(f))+
+    '<div class="demo-line"><span>First time here? Let the prototype drive itself.</span>'+
+      '<button class="btn btn-ghost btn-sm" onclick="tourGo(0)">Run the 3-minute demo</button></div>'+
+  '</div></div>';
+}
+function signinForm(f){
+  const locked = now().getTime() < S.ui.lockUntil;
+  const left = Math.ceil((S.ui.lockUntil-now().getTime())/1000);
+  return '<div class="eyebrow" style="margin-bottom:8px">Demo accounts — tap to fill</div>'+
+    '<div class="quickrow">'+DEMO_CREDS.map(c=>{
+      const u=findUser(c.uid);
+      return '<button class="quickchip" onclick="quickFill(\''+c.uid+'\')">'+
+        '<span>'+initials(u?u.name:c.role)+'</span>'+esc(ROLE_LABEL[c.role])+'</button>';
+    }).join('')+'</div>'+
+    '<div class="field"><label for="liUid">User ID</label>'+
+      '<input id="liUid" type="email" autocomplete="username" value="'+esc(f.liUid)+'" '+
+      'placeholder="you@example.com" onkeydown="if(event.key===\'Enter\')doLogin()"></div>'+
+    '<div class="field"><label for="liPw">Password</label><div class="pw-wrap">'+
+      '<input id="liPw" type="'+(S.ui.showPw?'text':'password')+'" autocomplete="current-password" '+
+      'value="'+esc(f.liPw)+'" onkeydown="if(event.key===\'Enter\')doLogin()">'+
+      '<button class="pw-toggle" onclick="togglePw()">'+(S.ui.showPw?'Hide':'Show')+'</button></div>'+
+      (locked?'<span class="hint" style="color:var(--lotus)">Locked after 5 failed attempts. '+
+        'Try again in '+left+'s.</span>':'')+'</div>'+
+    '<div class="login-ft">'+
+      '<button class="btn btn-pri" '+(locked?'disabled':'')+' onclick="doLogin()">Sign in</button>'+
+    '</div>'+
+    '<div class="switcher">No account yet? '+
+      '<button class="btn-link" onclick="setTab(\'signup\')">Create one</button></div>';
+}
+function signupForm(f){
+  const r=S.ui.signupRole;
+  return '<div class="field"><label>I am signing up as</label><div class="roleopts">'+
+    ['payer','payee','reviewer'].map(k=>
+      '<button class="roleopt" aria-pressed="'+(k===r)+'" onclick="setSignupRole(\''+k+'\')">'+
+      '<span class="roleopt-dot"></span><span><b>'+esc(ROLE_LABEL[k])+'</b>'+
+      '<i>'+esc(ROLE_DESC[k])+'</i></span></button>').join('')+'</div></div>'+
+    '<div class="field"><label for="suName">Full name</label>'+
+      '<input id="suName" autocomplete="name" value="'+esc(f.name)+'" placeholder="Your name"></div>'+
+    (r==='reviewer'
+      ? '<div class="field"><label for="suCode">Officer authorisation code</label>'+
+        '<input id="suCode" value="'+esc(f.code)+'" placeholder="Issued by your unit">'+
+        '<span class="hint">A reviewer can freeze money, so this role cannot be self-registered. '+
+        'Demo code: <b class="mono">'+OFFICER_CODE+'</b></span></div>'
+      : '<div class="field"><label for="suOrg">Business name</label>'+
+        '<input id="suOrg" value="'+esc(f.org)+'" placeholder="Registered trading name"></div>')+
+    '<div class="field"><label for="suUid">User ID</label>'+
+      '<input id="suUid" type="email" autocomplete="username" value="'+esc(f.uid)+'" '+
+      'placeholder="you@example.com"></div>'+
+    '<div class="field"><label for="suPw">Password</label><div class="pw-wrap">'+
+      '<input id="suPw" type="'+(S.ui.showPw?'text':'password')+'" autocomplete="new-password" value="'+esc(f.pw)+'">'+
+      '<button class="pw-toggle" onclick="togglePw()">'+(S.ui.showPw?'Hide':'Show')+'</button></div>'+
+      '<span class="hint">At least 8 characters, with a letter and a number.</span></div>'+
+    '<div class="field"><label for="suPw2">Confirm password</label>'+
+      '<input id="suPw2" type="'+(S.ui.showPw?'text':'password')+'" autocomplete="new-password" '+
+      'value="'+esc(f.pw2)+'" onkeydown="if(event.key===\'Enter\')doSignup()"></div>'+
+    '<div class="login-ft"><button class="btn btn-pri" onclick="doSignup()">Create account</button></div>'+
+    '<div class="switcher">Already registered? '+
+      '<button class="btn-link" onclick="setTab(\'signin\')">Sign in</button></div>';
+}
+
+/* form state survives a re-render */
+function captureForm(){
+  const g=id=>{const e=document.getElementById(id); return e?e.value:null;};
+  const f=S.ui.form;
+  ['liUid','liPw'].forEach(k=>{ const v=g(k); if(v!==null) f[k]=v; });
+  [['suName','name'],['suOrg','org'],['suUid','uid'],['suCode','code'],
+   ['suPw','pw'],['suPw2','pw2']].forEach(([id,k])=>{ const v=g(id); if(v!==null) f[k]=v; });
+}
+function setTab(t){ captureForm(); S.ui.tab=t; S.ui.err=''; S.ui.ok=''; render(); }
+function setSignupRole(r){ captureForm(); S.ui.signupRole=r; S.ui.err=''; render(); }
+function togglePw(){ captureForm(); S.ui.showPw=!S.ui.showPw; render(); }
+function quickFill(uid){
+  const c=DEMO_CREDS.find(x=>x.uid===uid);
+  S.ui.form.liUid=c.uid; S.ui.form.liPw=c.pw; S.ui.err=''; render();
+}
+
+/* ---------- sign in ---------- */
+async function doLogin(){
+  captureForm();
+  if(now().getTime() < S.ui.lockUntil) return;
+  const f=S.ui.form;
+  const u=findUser(f.liUid);
+  const okPw = await verifyPassword(u, f.liPw);
+  if(!u || !okPw){
+    S.ui.fails++;
+    logSec('bad','Failed sign-in for '+(f.liUid||'(blank)'));
+    if(S.ui.fails>=5){
+      S.ui.lockUntil = now().getTime()+30000;
+      S.ui.err='Too many failed attempts. Sign-in is locked for 30 seconds.';
+      logSec('bad','Sign-in locked after 5 failed attempts');
+      setTimeout(()=>{ S.ui.fails=0; S.ui.err=''; if(!S.auth) render(); }, 30200);
+    } else {
+      S.ui.err='That user ID and password do not match an account. '+
+        (5-S.ui.fails)+' attempt'+(5-S.ui.fails===1?'':'s')+' left before the account is locked.';
+    }
+    render(); return;
+  }
+  S.ui.fails=0; S.ui.err=''; S.ui.ok='';
+  establishSession(u, 'password');
+  toast('Signed in as '+u.name+' · '+ROLE_LABEL[u.role]+'.');
+}
+
+/* ---------- sign up ---------- */
+async function doSignup(){
+  captureForm();
+  const f=S.ui.form, role=S.ui.signupRole;
+  const fail = m => { S.ui.err=m; render(); };
+  if(f.name.trim().length<2) return fail('Enter the name this account belongs to.');
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.uid.trim())) return fail('Enter a valid email address as your user ID.');
+  if(findUser(f.uid)) return fail('An account with that user ID already exists. Sign in instead.');
+  if(role==='reviewer' && f.code.trim().toUpperCase()!==OFFICER_CODE)
+    return fail('That officer authorisation code is not valid, so a reviewer account cannot be created.');
+  if(f.pw.length<8) return fail('Use a password of at least 8 characters.');
+  if(!/[A-Za-z]/.test(f.pw) || !/[0-9]/.test(f.pw)) return fail('Your password needs at least one letter and one number.');
+  if(f.pw!==f.pw2) return fail('The two passwords do not match.');
+
+  const acKey = newAccountFor(role, f.name.trim(), f.org.trim(), f.uid.trim());
+  const u = await makeUser({name:f.name.trim(), org:f.org.trim()||ROLE_LABEL[role],
+                            role, uid:f.uid.trim(), pw:f.pw, acKey});
+  S.ui.err=''; S.ui.form={liUid:'',liPw:'',name:'',org:'',uid:'',code:'',pw:'',pw2:''};
+  logSec('good','Account created for '+u.uid+' as '+ROLE_LABEL[role]);
+  establishSession(u,'registration');
+  toast('Account created. You are signed in as a '+ROLE_LABEL[role]+'.');
+}
+
+/* ---------- session ---------- */
+function establishSession(u, how){
+  S.auth={uid:u.uid, role:u.role, name:u.name, org:u.org, acKey:u.acKey, at:now(), how};
+  S.role=u.role; S.denied=null;
+  logSec('good','Signed in as '+u.uid+' · '+ROLE_LABEL[u.role]);
+  render(); window.scrollTo({top:0,behavior:'smooth'});
+}
+function sessionForRole(role){ return USERS.find(u=>u.role===role) || null; }
+function signInAs(role){ const u=sessionForRole(role); if(u) establishSession(u,'demo'); }
+function signOut(){
+  if(S.auth) logSec('good','Signed out '+S.auth.uid);
+  S.auth=null; S.denied=null; S.ui.err=''; S.ui.ok=''; S.ui.tab='signin';
+  tourExit(); render(); window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ---------- access control ---------- */
+const guard = role => !!S.auth && S.auth.role===role;
+function attemptAccess(role){
+  if(guard(role)){ S.denied=null; render(); return; }
+  S.denied=role;
+  logSec('bad','Blocked: '+S.auth.uid+' tried to open the '+ROLE_WORKSPACE[role]);
+  render(); window.scrollTo({top:0,behavior:'smooth'});
+}
+function backToMine(){ S.denied=null; render(); window.scrollTo({top:0,behavior:'smooth'}); }
+function renderDenied(role){
+  return '<div class="denied"><div class="alertmark am-danger">'+I.lock+'</div>'+
+    '<h2>Access denied</h2>'+
+    '<p>You are signed in as <b>'+esc(S.auth.name)+'</b>, whose account holds the '+
+      '<b>'+esc(ROLE_LABEL[S.auth.role])+'</b> role. The '+esc(ROLE_WORKSPACE[role])+
+      ' belongs to a different role and cannot be opened from this session.</p>'+
+    '<p>The role is fixed on the account at registration, so it cannot be changed by '+
+      'editing a form, and this attempt has been written to the security log below.</p>'+
+    '<div class="login-ft" style="justify-content:center;margin-top:20px">'+
+      '<button class="btn btn-pri" style="flex:0 0 auto" onclick="backToMine()">Back to my workspace</button>'+
+      '<button class="btn btn-ghost" style="flex:0 0 auto" onclick="signOut()">Sign out</button></div>'+
+  '</div>';
+}
+function securityCard(){
+  const others=['payer','payee','reviewer'].filter(r=>r!==S.auth.role);
+  return '<div class="seccard"><div class="card-hd"><h3>Workspace access</h3>'+
+    '<span class="sub mono">'+esc(S.auth.uid)+'</span></div>'+
+    '<p style="font-size:13px;color:var(--ink-2);line-height:1.55">You are in the '+
+      '<b>'+esc(ROLE_WORKSPACE[S.auth.role])+'</b>. Your account holds one role and can open one '+
+      'workspace. Try the others — they will refuse you and log the attempt.</p>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">'+
+      others.map(r=>'<button class="btn btn-ghost btn-sm" onclick="attemptAccess(\''+r+'\')">'+
+        'Open '+esc(ROLE_WORKSPACE[r])+'</button>').join('')+'</div>'+
+    (S.seclog.length?'<ul class="seclog">'+S.seclog.map(e=>
+      '<li class="'+(e.kind==='bad'?'bad':e.kind==='good'?'good':'')+'">'+
+      '<b>'+fmtT(e.at).replace(/:\d\d /,' ')+'</b><span>'+esc(e.text)+'</span></li>').join('')+'</ul>':'')+
+  '</div>';
+}
+function newAccountNote(){
+  return '<div class="card" style="background:var(--ok-soft);margin-bottom:14px">'+
+    '<div class="ver-hd">'+pill('ok','New account · nothing shared',I.shield)+'</div>'+
+    '<p style="font-size:13.5px;color:var(--ok-ink);margin-top:8px">This account was created a '+
+    'moment ago, so it starts completely empty — no balance, no deals, no inflow history. '+
+    'None of the demo ledger is visible to it, which is the point: one account never sees another’s '+
+    'money. To watch the full fraud scenario, sign out and use the demo accounts.</p></div>';
+}
+
+/* ---------- reset ---------- */
+function resetDemo(){
+  Object.keys(AC0).forEach(k=>Object.assign(AC[k], JSON.parse(JSON.stringify(AC0[k]))));
+  S.deals.length=0; S.spikes.length=0; S.inflowByVpa={};
+  dealSeq=0; skew=0; S.denied=null;
+  tourExit(); closeModal();
+  seed(); render();
+  toast('Demo reset — clean ledger, nothing held, nothing frozen.');
+}
+
+/* ---------- top bar ---------- */
+function renderTopRight(){
+  const el=$('#topRight'); if(!el) return;
+  if(!S.auth){ el.innerHTML='<span class="tb-btn" style="background:none;opacity:.65">Not signed in</span>'; return; }
+  el.innerHTML='<span class="clockchip"><span id="clock">--</span></span>'+
+    (S.tourStep<0?'<button class="tb-btn" onclick="tourGo(0)">Guided demo</button>':'')+
+    '<button class="tb-btn" onclick="resetDemo()">Reset demo</button>'+
+    '<span class="idchip"><span class="idchip-av">'+initials(S.auth.name)+'</span>'+
+      '<span><b>'+esc(S.auth.name)+'</b><i>'+esc(ROLE_LABEL[S.auth.role])+
+      (S.auth.org?' · '+esc(S.auth.org):'')+'</i></span></span>'+
+    '<button class="tb-btn" onclick="signOut()">Sign out</button>';
+}
+
+/* ---------- render ---------- */
+function render(){
+  const authed=!!S.auth;
+  const lv=document.getElementById('view-login');
+  lv.hidden=authed; lv.innerHTML=authed?'':renderAuth();
+  const blocked = authed && !!S.denied;
+  ['payer','payee','reviewer'].forEach(r=>{
+    const el=document.getElementById('view-'+r);
+    const on = authed && r===S.role;
+    el.hidden=!on;
+    // inactive workspaces are emptied, not just hidden, so nothing of theirs stays in the document
+    if(!on){ el.innerHTML=''; return; }
+    if(blocked){ el.innerHTML = renderDenied(S.denied) + securityCard(); return; }
+    if(!guard(r)){ el.innerHTML = renderDenied(r); return; }   // backstop: never render a role you don't hold
+    const fresh = S.auth.acKey.charAt(0)==='u' ? newAccountNote() : '';
+    el.innerHTML = fresh +
+      (r==='payer'?renderPayer(): r==='payee'?renderPayee(): renderReviewer()) +
+      securityCard();
+  });
+  renderTopRight();
+  if(authed && !blocked){
+    if(S.role==='payee') wireChart(me().vpa);
+    if(S.role==='payer') previewRisk();
+  }
+  tickTimers();
+}
+
+/* ---------- per-second timers ---------- */
+function tickTimers(){
+  const ck=$('#clock'); if(ck) ck.textContent = fmtT(now());
+  const t=now();
+  document.querySelectorAll('[data-hold]').forEach(el=>{
+    const d=S.deals.find(x=>x.id===el.dataset.hold); if(!d||!d.holdUntil) return;
+    const s=Math.max(0,Math.round((d.holdUntil-t)/1000));
+    el.textContent = String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  });
+  document.querySelectorAll('[data-slaclock]').forEach(el=>{
+    const d=S.deals.find(x=>x.id===el.dataset.slaclock); if(!d||!d.dispute) return;
+    const ms=Math.max(0,d.dispute.slaDueAt-t), h=Math.floor(ms/36e5),
+          m=Math.floor(ms%36e5/6e4), s=Math.floor(ms%6e4/1000);
+    el.textContent=[h,m,s].map(v=>String(v).padStart(2,'0')).join(':');
+    const bar=document.querySelector('[data-slabar="'+d.id+'"]');
+    if(bar) bar.style.width=(ms/SLA_MS*100)+'%';
+    const box=document.querySelector('[data-sla="'+d.id+'"]');
+    if(box) box.classList.toggle('urgent', ms < SLA_MS*0.25);
+  });
+}
+setInterval(()=>{ tickTimers(); tickHolds(); }, 1000);
+
+/* ---------- guided demo ---------- */
+const TOUR=[
+ {role:'payee', txt:'Priya runs a design studio. ₹2,14,500 in the account, every rupee usable. Watch what one fraud complaint does to it.'},
+ {role:'payer', txt:'A new sender — QuickCash Traders, account opened 19 days ago — proposes ₹38,000. The risk engine scores it before anything moves.',
+  run(){ render(); $('#pAmt').value=38000;
+         $('#pPur').value='Office furniture — advance payment'; previewRisk(); }},
+ {role:'payer', txt:'Proposed, not paid. The money is still sitting in the sender’s account — it cannot be dumped on Priya without her say-so.',
+  run(){ doPropose(); }},
+ {role:'payee', txt:'Priya accepts. Only now does a Deal ID exist, sealed with a real SHA-256 hash of the agreement. Because the sender scores 55/100, it is held before it settles.',
+  async run(){ const d=S.deals.find(x=>x.status==='proposed'); if(d) await acceptDeal(d.id); }},
+ {role:'payee', txt:'Hold cleared, money landed — and the day’s inflow just broke this account’s own normal ceiling. The system asks her why. Nothing is blocked; it just wants the answer on record.',
+  run(){ const d=S.deals.find(x=>x.status==='risk_hold'); if(d){ d.holdUntil=now(); tickHolds(); } }},
+ {role:'payee', txt:'She answers in her own words. It is now timestamped — days before any complaint exists.',
+  async run(){ let sp=S.spikes.find(s=>!s.versions.length); if(!sp) return;
+    if(!document.querySelector('#spkTxt')) openSpikeModal(sp);
+    await new Promise(r=>setTimeout(r,60));
+    $('#spkCat').value='Several invoices cleared on the same day';
+    $('#spkTxt').value='Three retail clients cleared their Diwali campaign invoices on the same day, plus a furniture advance from a new buyer for the studio fit-out.';
+    document.querySelectorAll('.spkEv').forEach(c=>{ if(/invoice|contract/i.test(c.value)) c.checked=true; });
+    await new Promise(r=>setTimeout(r,650)); await submitExplanation(sp.id); }},
+ {role:'payee', txt:'She spots a mistake and corrects it. This is the part a chat app gets wrong: it would just say “Edited”. Here the record keeps the old version and shows exactly when it was last edited.',
+  async run(){ const sp=S.spikes.find(s=>s.versions.length); if(!sp) return;
+    await saveExplanation(sp,{category:'Several invoices cleared on the same day',
+      text:'Three retail clients cleared their Diwali campaign invoices on the same day — Kessa, Marigold Retail and Two Fold — plus a furniture advance from a new buyer, QuickCash Traders, for the studio fit-out.',
+      evidence:['Signed contract or PO','Tax invoice','Client chat record']});
+    render(); toast('Last edited '+fmtDT(curVer(sp).savedAt)+' — the time is part of the record.'); }},
+ {role:'reviewer', txt:'Three days later the complaint lands. The cyber cell names the Deal ID — not the account.',
+  run(){ const d=S.deals.find(x=>x.status==='paid'&&x.fromKey==='mule'); if(d){ skew += 3*864e5; fileComplaint(d.id,AC.victim.name,'NCRP-2026-0918-44192'); } }},
+ {role:'payee', txt:'This is the whole argument. ₹38,000 held. ₹2,14,500 still moving. Under today’s rules both bars would be red and she would be out of business for weeks.'},
+ {role:'reviewer', txt:'The proof pack built itself — and it carries her explanation with every version. Note the badge: the original pre-dates the complaint by three days, so it cannot have been written to answer it.'},
+ {role:'reviewer', txt:'Released inside the SLA. The sender’s account is the one that gets frozen in full, and the Deal ID trail shows where the stolen money went.',
+  run(){ const d=S.deals.find(x=>x.status==='disputed'); if(d) resolveDispute(d.id,'release'); AC.mule.frozen=true; }},
+ {role:'payee', txt:'Back to green, with a complete audit trail on every record. That is the entire mechanism — propose, accept, explain, dispute one deal, release.'}
+];
+async function tourGo(n){
+  if(n<0||n>=TOUR.length){ tourExit(); return; }
+  S.tourStep=n; const st=TOUR[n];
+  closeModal();
+  if(st.role){ const u=sessionForRole(st.role);
+    if(u){ S.auth={uid:u.uid,role:u.role,name:u.name,org:u.org,acKey:u.acKey,at:now(),how:'demo'};
+           S.role=st.role; S.denied=null; } }
+  render();
+  if(st.run) await st.run();
+  render(); drawTour(); window.scrollTo({top:0,behavior:'smooth'});
+}
+function drawTour(){
+  const n=S.tourStep; if(n<0){ $('#tourRoot').innerHTML=''; return; }
+  const st=TOUR[n], last=n===TOUR.length-1;
+  $('#tourRoot').innerHTML='<div class="tour"><div class="tour-step">'+(n+1)+' / '+TOUR.length+'</div>'+
+    '<div class="tour-txt">'+esc(st.txt)+'</div>'+
+    '<div style="display:flex;gap:8px;margin-left:auto">'+
+      '<button class="btn btn-ghost btn-sm" onclick="tourExit()">Exit</button>'+
+      (n>0?'<button class="btn btn-ghost btn-sm" onclick="tourGo('+(n-1)+')" '+
+        (TOUR[n].run?'disabled title="Steps that change data cannot be replayed"':'')+'>Back</button>':'')+
+      '<button class="btn btn-pri btn-sm" onclick="'+(last?'tourExit()':'tourGo('+(n+1)+')')+'">'+
+        (last?'Done':'Next')+'</button>'+
+    '</div></div>';
+  document.body.style.paddingBottom='96px'; document.body.classList.add('touring');
+}
+function tourExit(){ S.tourStep=-1; $('#tourRoot').innerHTML=''; document.body.style.paddingBottom=''; document.body.classList.remove('touring'); renderTopRight(); }
+
+/* ---------- boot ---------- */
+$('#themeBtn').addEventListener('click',()=>{
+  const cur=document.documentElement.getAttribute('data-theme');
+  const dark=cur ? cur==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.setAttribute('data-theme', dark?'light':'dark');
+  render();
+});
+(async()=>{ await seedUsers(); seed(); render(); })();
+</script>
+
+</body>
+</html>
