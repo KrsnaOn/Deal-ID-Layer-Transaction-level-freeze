@@ -59,10 +59,7 @@ Firebase is used for **two independent things** in this project: **Authenticatio
 |---|---|---|
 | Firebase Authentication | ✅ Yes | Google sign-in via `signInWithPopup` |
 | Firebase Hosting | ✅ Yes | Serves `index.html` as a static SPA |
-| Cloud Firestore | ❌ No | Roadmap — cross-institution proof-pack ledger |
-| Realtime Database | ❌ No | Not used |
-| Cloud Functions | ❌ No | Roadmap — server-side hold orchestration |
-| Cloud Storage | ❌ No | Not used |
+
 
 ### Firebase SDK setup
 
