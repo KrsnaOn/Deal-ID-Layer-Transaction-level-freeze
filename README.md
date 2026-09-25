@@ -58,17 +58,79 @@ versioned explanations, and SHA-256 proof verification in the browser.
 
 ## Authentication
 
-Alongside the local email/password accounts described below, the sign-in screen offers
-**Continue with Google**, backed by Firebase Authentication:
+The app has two independent, parallel sign-in systems that share the same three workspaces:
 
-- Google only ever returns a name and email — never a role — so a first-time Google sign-in shows a
-  one-time role picker (reviewer still requires the `CYBER-2026` officer code) before the workspace opens.
-- The chosen role is saved in the browser's `localStorage`, keyed by the Google account's email, so
-  returning to the same browser skips the picker. It does not sync across browsers or devices.
-- Google sign-in and the local password accounts are independent systems that share the same
-  workspaces; the scripted demo tour and its three fixed demo accounts are untouched.
-- **Deployment note:** in the Firebase console, under Authentication → Settings → Authorized domains,
-  add your Vercel domain (e.g. `your-app.vercel.app`) or `signInWithPopup` will be rejected on that origin.
+1. **Local password accounts** — the original system. Register with an email, password, and a role
+   fixed at registration. State (users, sessions) lives in browser memory only; see
+   [Security Model](#security-model).
+2. **Google sign-in** — backed by Firebase Authentication, added alongside the local system without
+   changing it. This is what the rest of this section documents.
+
+### How Google sign-in works in this app
+
+- The sign-in screen's **Continue with Google** button calls `signInWithPopup` with a
+  `GoogleAuthProvider`, wired up in a small `<script type="module">` block near the top of
+  `index.html` that exposes `window.DealIDFirebase.signInWithGoogle()` /
+  `.signOut()` to the rest of the (non-module) app script.
+- Google only ever returns a name and email — never a role — so a **first-time** Google sign-in
+  shows a one-time role picker (payer / payee / reviewer; reviewer still requires the
+  `CYBER-2026` officer code) before the workspace opens.
+- The chosen role is saved in the browser's `localStorage` under the key
+  `dealid:googleRole:<email>`, so returning to the same browser on a later visit skips the picker.
+  This does **not** sync across browsers or devices — it's a client-only mapping, matching this
+  prototype's "no backend, no database" design (see [Technical Highlights](#technical-highlights)).
+- Once resolved, a Google-authenticated user is treated exactly like a password account internally
+  (`establishSession`, workspace guards, the security log) — the only difference recorded is
+  `S.auth.how === 'google'`, which is used solely so **Sign out** also calls Firebase's `signOut()`.
+- The scripted **"Run the 3-minute demo"** tour and its three fixed demo accounts are completely
+  untouched by any of this.
+
+### Setting up your own Firebase project
+
+1. Go to the [Firebase console](https://console.firebase.google.com) → **Add project** (or reuse
+   an existing one).
+2. **Project settings → General → Add app → Web** (the `</>` icon). Register an app; you don't need
+   Firebase Hosting for this step. Copy the resulting config object
+   (`apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`).
+3. Paste that object into the `firebaseConfig` constant inside the `<script type="module">` block
+   near the top of `index.html`. This Firebase **web API key is not a secret** — Firebase's real
+   access control is enforced by the settings in steps 4–5, not by hiding this key — so it's safe
+   to commit and ship in a static file.
+4. **Authentication → Sign-in method → Add new provider → Google → Enable.** Skipping this step is
+   the most common cause of a sign-in failure (surfaces in this app as
+   `Google sign-in failed: auth/operation-not-allowed`).
+5. **Authentication → Settings → Authorized domains.** `localhost` is authorized by default, which
+   covers local preview (see [Local Preview](#local-preview)). For any real deployment, add that
+   exact domain here too (e.g. `your-app.vercel.app`) — otherwise `signInWithPopup` fails with
+   `auth/unauthorized-domain`.
+
+### Firebase CLI (optional, for local development)
+
+The CLI isn't required to run or deploy this static site — it's useful if you want to test
+Google/email sign-in against the Firebase Auth **emulator** instead of the real `dead-id` project
+while developing:
+
+```bash
+npm install -g firebase-tools
+firebase login              # opens a browser for Google OAuth
+                             # if it can't open a browser (e.g. over SSH / WSL), use:
+                             # firebase login --no-localhost
+firebase init emulators      # select Authentication Emulator
+firebase emulators:start
+```
+
+### Troubleshooting
+
+The app now shows the real Firebase error code instead of a generic message (e.g.
+`Google sign-in failed: auth/popup-blocked`). Common ones:
+
+| Error code | Cause | Fix |
+|---|---|---|
+| `auth/operation-not-allowed` | Google isn't enabled as a sign-in provider | Step 4 above |
+| `auth/unauthorized-domain` | The current origin isn't in the authorized domains list | Step 5 above |
+| `auth/popup-blocked` | The browser blocked the sign-in popup | Allow popups for the site and retry |
+| `auth/popup-closed-by-user` | The account chooser was closed before completing sign-in | Retry and finish the popup flow |
+| `Google sign-in is still loading...` | The page's `<script type="module">` hasn't finished loading yet (rare; happens on a very slow connection right after page load) | Wait a second and retry |
 
 ## Demo Accounts
 

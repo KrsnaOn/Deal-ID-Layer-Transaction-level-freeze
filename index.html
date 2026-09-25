@@ -1703,7 +1703,8 @@ async function doGoogleContinue(){
     const profile = await window.DealIDFirebase.signInWithGoogle();
     handleGoogleProfile(profile);
   }catch(e){
-    S.ui.err='Google sign-in failed or was cancelled.'; render();
+    console.error('Google sign-in error:', e);
+    S.ui.err='Google sign-in failed: '+(e && (e.code||e.message) || 'unknown error'); render();
   }
 }
 function handleGoogleProfile(profile){
