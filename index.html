@@ -461,6 +461,37 @@ body.touring .toast{bottom:calc(104px + env(safe-area-inset-bottom,0px))}
 <div id="toastRoot"></div>
 <div id="tourRoot"></div>
 
+<script type="module">
+  /* Firebase Authentication — Google sign-in only. This runs alongside, and does not
+     replace, the scripted local demo tour and its three fixed demo accounts. */
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut
+  } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyB3urhcN7UTwCinH_cR2RLteSM1Rnx3KrM",
+    authDomain: "dead-id.firebaseapp.com",
+    projectId: "dead-id",
+    storageBucket: "dead-id.firebasestorage.app",
+    messagingSenderId: "842375119569",
+    appId: "1:842375119569:web:861c11bc0e68674e04bbf0"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
+
+  window.DealIDFirebase = {
+    async signInWithGoogle(){
+      const result = await signInWithPopup(auth, provider);
+      const u = result.user;
+      return { uid: u.uid, name: u.displayName || u.email, email: u.email, photo: u.photoURL };
+    },
+    async signOut(){ try{ await fbSignOut(auth); }catch(e){ /* already signed out */ } }
+  };
+</script>
+
 <script>
 /* ============================================================
    Deal-ID Layer — transaction-level freeze prototype
@@ -560,6 +591,23 @@ async function seedUsers(){
                   uid:DEMO_CREDS[2].uid, pw:DEMO_CREDS[2].pw, acKey:'reviewer'});
 }
 
+/* Google-authenticated users: Google only ever hands us a name/email, never a role, so the
+   role each Google account holds is captured once (a one-time picker on first sign-in) and
+   kept in this browser's localStorage, keyed by the Google account's email. */
+const GOOGLE_ROLE_KEY = 'dealid:googleRole:';
+function loadGoogleRole(uid){
+  try{ const raw = localStorage.getItem(GOOGLE_ROLE_KEY + uid); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function saveGoogleRole(uid, data){
+  try{ localStorage.setItem(GOOGLE_ROLE_KEY + uid, JSON.stringify(data)); } catch(e){ /* storage unavailable */ }
+}
+function pushGoogleUser({name, org, role, uid, acKey}){
+  const u = {uid, name, org, role, acKey, salt:null, hash:null, provider:'google', createdAt:now()};
+  USERS.push(u);
+  return u;
+}
+
 /* a freshly registered user gets their own empty account — never a share of anyone else's */
 let acSeq = 0;
 function newAccountFor(role, name, org, uid){
@@ -587,6 +635,7 @@ const S = {
   denied:null,    // a workspace the signed-in user tried and was refused
   seclog:[],      // recent authentication and access events
   ui:{tab:'signin', err:'', ok:'', fails:0, lockUntil:0, showPw:false, signupRole:'payee',
+      googlePending:null,
       form:{liUid:'', liPw:'', name:'', org:'', uid:'', code:'', pw:'', pw2:''}}
 };
 
@@ -1461,13 +1510,29 @@ function authTabs(){
     '<button role="tab" aria-selected="'+(t==='signup')+'" onclick="setTab(\'signup\')">Create account</button>'+
   '</div>';
 }
+function authAvatar(){
+  return '<div class="acct-av" style="width:42px;height:42px;border-radius:13px;margin-bottom:14px">'+
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">'+
+    '<path d="M12 3l7.5 3.2v5c0 4.5-3 8-7.5 9.3C7.5 19.2 4.5 15.7 4.5 11.2v-5L12 3z" stroke-linejoin="round"/>'+
+    '<path d="M8.9 12.2l2.1 2.1 4.1-4.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>';
+}
+function googleButton(){
+  return '<button type="button" class="btn btn-ghost" onclick="doGoogleContinue()" '+
+      'style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px">'+
+    '<svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">'+
+      '<path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.9 32.7 29.4 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.3-.1-2.7-.4-3.5z"/>'+
+      '<path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.1 18.9 12 24 12c3.1 0 5.9 1.2 8 3.1l6-6C34.6 5.1 29.6 3 24 3 16.3 3 9.6 7.3 6.3 14.7z"/>'+
+      '<path fill="#4CAF50" d="M24 45c5.5 0 10.4-2.1 14.1-5.5l-6.5-5.5C29.6 35.9 26.9 37 24 37c-5.3 0-9.8-3.3-11.4-8l-6.6 5.1C9.6 40.7 16.3 45 24 45z"/>'+
+      '<path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.1-3.5 5.5-6.6 6.9l6.5 5.5C39.1 37.5 45 31.5 45 24c0-1.3-.1-2.7-.4-3.5z"/>'+
+    '</svg><span>Continue with Google</span></button>'+
+    '<div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--ink-3);font-size:12px">'+
+      '<div style="flex:1;height:1px;background:var(--line)"></div>or<div style="flex:1;height:1px;background:var(--line)"></div></div>';
+}
 function renderAuth(){
   const f=S.ui.form;
+  if(S.ui.googlePending) return renderGoogleRolePicker();
   return '<div class="login-wrap"><div class="login-card">'+
-    '<div class="acct-av" style="width:42px;height:42px;border-radius:13px;margin-bottom:14px">'+
-      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">'+
-      '<path d="M12 3l7.5 3.2v5c0 4.5-3 8-7.5 9.3C7.5 19.2 4.5 15.7 4.5 11.2v-5L12 3z" stroke-linejoin="round"/>'+
-      '<path d="M8.9 12.2l2.1 2.1 4.1-4.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'+
+    authAvatar()+
     '<h2>'+(S.ui.tab==='signin'?'Sign in to the Deal-ID layer':'Create your account')+'</h2>'+
     '<p class="login-lead">'+(S.ui.tab==='signin'
       ? 'Your role is held on your account, not chosen at sign-in, so nobody can pick their way into another workspace.'
@@ -1475,9 +1540,37 @@ function renderAuth(){
     authTabs()+
     (S.ui.err?'<div class="login-err">'+I.alert+'<div>'+esc(S.ui.err)+'</div></div>':'')+
     (S.ui.ok?'<div class="login-ok">'+I.check+'<div>'+esc(S.ui.ok)+'</div></div>':'')+
+    googleButton()+
     (S.ui.tab==='signin'?signinForm(f):signupForm(f))+
     '<div class="demo-line"><span>First time here? Let the prototype drive itself.</span>'+
       '<button class="btn btn-ghost btn-sm" onclick="tourGo(0)">Run the 3-minute demo</button></div>'+
+  '</div></div>';
+}
+function renderGoogleRolePicker(){
+  const p=S.ui.googlePending, f=S.ui.form, r=S.ui.signupRole;
+  return '<div class="login-wrap"><div class="login-card">'+
+    authAvatar()+
+    '<h2>Choose your role</h2>'+
+    '<p class="login-lead">Signed in as <b>'+esc(p.name||p.email)+'</b> via Google. Pick the role this '+
+      'Google account will hold — it is fixed from here on and decides the only workspace this login can '+
+      'ever open, exactly like a password account.</p>'+
+    (S.ui.err?'<div class="login-err">'+I.alert+'<div>'+esc(S.ui.err)+'</div></div>':'')+
+    '<div class="field"><label>I am signing up as</label><div class="roleopts">'+
+      ['payer','payee','reviewer'].map(k=>
+        '<button class="roleopt" aria-pressed="'+(k===r)+'" onclick="setSignupRole(\''+k+'\')">'+
+        '<span class="roleopt-dot"></span><span><b>'+esc(ROLE_LABEL[k])+'</b>'+
+        '<i>'+esc(ROLE_DESC[k])+'</i></span></button>').join('')+'</div></div>'+
+    (r==='reviewer'
+      ? '<div class="field"><label for="suCode">Officer authorisation code</label>'+
+        '<input id="suCode" value="'+esc(f.code)+'" placeholder="Issued by your unit">'+
+        '<span class="hint">A reviewer can freeze money, so this role cannot be self-registered. '+
+        'Demo code: <b class="mono">'+OFFICER_CODE+'</b></span></div>'
+      : '<div class="field"><label for="suOrg">Business name</label>'+
+        '<input id="suOrg" value="'+esc(f.org)+'" placeholder="Registered trading name"></div>')+
+    '<div class="login-ft">'+
+      '<button class="btn btn-pri" onclick="doGoogleRoleContinue()">Continue</button>'+
+      '<button class="btn btn-ghost" onclick="cancelGooglePending()">Cancel</button>'+
+    '</div>'+
   '</div></div>';
 }
 function signinForm(f){
@@ -1600,6 +1693,61 @@ async function doSignup(){
   toast('Account created. You are signed in as a '+ROLE_LABEL[role]+'.');
 }
 
+/* ---------- sign in / sign up with Google ---------- */
+async function doGoogleContinue(){
+  S.ui.err='';
+  if(!window.DealIDFirebase){
+    S.ui.err='Google sign-in is still loading. Try again in a moment.'; render(); return;
+  }
+  try{
+    const profile = await window.DealIDFirebase.signInWithGoogle();
+    handleGoogleProfile(profile);
+  }catch(e){
+    S.ui.err='Google sign-in failed or was cancelled.'; render();
+  }
+}
+function handleGoogleProfile(profile){
+  const uid = (profile.email || profile.uid).toLowerCase().trim();
+  const existing = findUser(uid);
+  if(existing){
+    establishSession(existing,'google');
+    toast('Signed in as '+existing.name+' · '+ROLE_LABEL[existing.role]+'.');
+    return;
+  }
+  const saved = loadGoogleRole(uid);
+  if(saved){
+    const acKey = newAccountFor(saved.role, profile.name||uid, saved.org, uid);
+    const u = pushGoogleUser({name:profile.name||uid, org:saved.org, role:saved.role, uid, acKey});
+    logSec('good','Google sign-in for '+uid+' as '+ROLE_LABEL[saved.role]);
+    establishSession(u,'google');
+    toast('Signed in as '+u.name+' · '+ROLE_LABEL[saved.role]+'.');
+    return;
+  }
+  S.ui.googlePending = profile; S.ui.err=''; render();
+}
+function doGoogleRoleContinue(){
+  captureForm();
+  const p=S.ui.googlePending; if(!p) return;
+  const role=S.ui.signupRole, f=S.ui.form;
+  const fail = m => { S.ui.err=m; render(); };
+  if(role==='reviewer' && f.code.trim().toUpperCase()!==OFFICER_CODE)
+    return fail('That officer authorisation code is not valid, so a reviewer account cannot be created.');
+  const uid=(p.email||p.uid).toLowerCase().trim(), org=f.org.trim()||ROLE_LABEL[role];
+  saveGoogleRole(uid, {role, org});
+  const acKey = newAccountFor(role, p.name||uid, org, uid);
+  const u = pushGoogleUser({name:p.name||uid, org, role, uid, acKey});
+  S.ui.googlePending=null; S.ui.err='';
+  S.ui.form={liUid:'',liPw:'',name:'',org:'',uid:'',code:'',pw:'',pw2:''};
+  logSec('good','Google account registered for '+uid+' as '+ROLE_LABEL[role]);
+  establishSession(u,'google');
+  toast('Account created. You are signed in as a '+ROLE_LABEL[role]+'.');
+}
+function cancelGooglePending(){
+  S.ui.googlePending=null; S.ui.err='';
+  if(window.DealIDFirebase) window.DealIDFirebase.signOut();
+  render();
+}
+
 /* ---------- session ---------- */
 function establishSession(u, how){
   S.auth={uid:u.uid, role:u.role, name:u.name, org:u.org, acKey:u.acKey, at:now(), how};
@@ -1610,7 +1758,10 @@ function establishSession(u, how){
 function sessionForRole(role){ return USERS.find(u=>u.role===role) || null; }
 function signInAs(role){ const u=sessionForRole(role); if(u) establishSession(u,'demo'); }
 function signOut(){
-  if(S.auth) logSec('good','Signed out '+S.auth.uid);
+  if(S.auth){
+    logSec('good','Signed out '+S.auth.uid);
+    if(S.auth.how==='google' && window.DealIDFirebase) window.DealIDFirebase.signOut();
+  }
   S.auth=null; S.denied=null; S.ui.err=''; S.ui.ok=''; S.ui.tab='signin';
   tourExit(); render(); window.scrollTo({top:0,behavior:'smooth'});
 }
